@@ -1,0 +1,11 @@
+set_global_assignment -name QIP_FILE rtl/FX68K/fx68k.qip
+set_global_assignment -name QIP_FILE ../SH2/SH7604.qip
+set_global_assignment -name QIP_FILE ../Saturn/Saturn.qip
+set_global_assignment -name VHDL_FILE rtl/bram.vhd
+set_global_assignment -name VHDL_FILE rtl/mlab.vhd
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sdram.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sdram2.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/ddram.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/cache_2way.sv
+set_global_assignment -name SDC_FILE Saturn.sdc
+
