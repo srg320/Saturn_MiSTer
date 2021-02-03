@@ -534,18 +534,18 @@ sdram2 sdram2
 	.clk(clk_ram),
 	.rst(reset),
 
-	.addr_a0({4'b0000,VDP2_RA0_A}), // 0000000-001FFFF
-	.addr_a1({4'b0000,VDP2_RA1_A}),
+	.addr_a0({VDP2_RA1_WE,3'b0000,VDP2_RA0_A}), // 0000000-001FFFF
+	.addr_a1({VDP2_RA1_WE,3'b0000,VDP2_RA1_A}),
 	.din_a(VDP2_RA0_D),
-	.wr_a({2{VDP2_RA0_WE}}),
+	.wr_a({2{VDP2_RA0_WE|VDP2_RA1_WE}}),
 	.rd_a(VDP2_RA0_RD|VDP2_RA1_RD),
 	.dout_a0(VDP2_RA0_Q),
 	.dout_a1(VDP2_RA1_Q),
 
-	.addr_b0({4'b0000,VDP2_RB0_A}),
-	.addr_b1({4'b0000,VDP2_RB1_A}),
+	.addr_b0({VDP2_RB1_WE,3'b0000,VDP2_RB0_A}),
+	.addr_b1({VDP2_RB1_WE,3'b0000,VDP2_RB1_A}),
 	.din_b(VDP2_RB0_D),
-	.wr_b({2{VDP2_RB0_WE}}),
+	.wr_b({2{VDP2_RB0_WE|VDP2_RB1_WE}}),
 	.rd_b(VDP2_RB0_RD|VDP2_RB1_RD),
 	.dout_b0(VDP2_RB0_Q),
 	.dout_b1(VDP2_RB1_Q)
