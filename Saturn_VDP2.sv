@@ -449,8 +449,6 @@ sdram2 sdram2
 	.SDRAM_A(SDRAM2_A),
 	.SDRAM_BA(SDRAM2_BA),
 	.SDRAM_DQ(SDRAM2_DQ),
-//	.SDRAM_DQML(SDRAM_DQML),
-//	.SDRAM_DQMH(SDRAM_DQMH),
 	.SDRAM_nCS(SDRAM2_nCS),
 	.SDRAM_nWE(SDRAM2_nWE),
 	.SDRAM_nRAS(SDRAM2_nRAS),
@@ -458,7 +456,7 @@ sdram2 sdram2
 	
 	.init(~locked),
 	.clk(clk_ram),
-	.rst(reset),
+	.sync(ce_pix),
 
 	.addr_a0(cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} : {4'b0000,RA0_A}), // 0000000-001FFFF
 	.addr_a1(cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} : {4'b0000,RA1_A}),

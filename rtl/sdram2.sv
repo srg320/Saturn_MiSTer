@@ -15,7 +15,7 @@ module sdram2
 	// cpu/chipset interface
 	input             init,			// init signal after FPGA config to initialize RAM
 	input             clk,			// sdram is accessed at up to 128MHz
-	input             rst,			//
+	input             sync,			//
 
 	input      [20:1] addr_a0,
 	input      [20:1] addr_a1,
@@ -149,15 +149,16 @@ module sdram2
 	end
 	
 	always @(posedge clk) begin
-		reg rst_old;
+		reg sync_old;
 		
-		rst_old <= rst;
+		sync_old <= sync;
 		if (!init_done) begin
-			st_num <= '0;
-		end else if (!rst && rst_old) begin
-			st_num <= 4'd4;
+			st_num <= 4'd0;
+//		end else if (!sync && sync_old) begin
+//			st_num <= 4'd7;
 		end else begin
 			st_num <= st_num + 4'd1;
+			if (!sync && sync_old) st_num <= 4'd6;
 			state[1] <= state[0];
 			state[2] <= state[1];
 			state[3] <= state[2];
@@ -167,8 +168,8 @@ module sdram2
 				wa <= '{addr_a0[20],addr_b0[20]};
 				addr <= '{addr_a0[19:1],addr_a1[19:1],addr_b0[19:1],addr_b1[19:1]};
 				din <= '{din_a,din_b};
-				wr <= '{wr_a&{~rst,~rst},wr_b&{~rst,~rst}};
-				rd <= '{rd_a&~|wr_a&~rst,rd_b&~|wr_b&~rst};
+				wr <= '{wr_a,wr_b};
+				rd <= '{rd_a&~|wr_a,rd_b&~|wr_b};
 			end
 		end
 	end
