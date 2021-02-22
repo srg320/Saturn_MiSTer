@@ -108,7 +108,6 @@ module SH_regram (
 //		altdpram_component.wrcontrol_aclr = "OFF",
 //		altdpram_component.wrcontrol_reg = "INCLOCK";
 
-
 endmodule
 
 
@@ -184,7 +183,6 @@ module CACHE_RAM (
 		altsyncram_component.width_a = 8,
 		altsyncram_component.width_b = 8,
 		altsyncram_component.width_byteena_a = 1;
-
 
 endmodule
 
@@ -296,6 +294,7 @@ module CACHE_TAG (
 //		altdpram_component.wrcontrol_aclr = "OFF",
 //		altdpram_component.wrcontrol_reg = "INCLOCK";
 
+endmodule
 
 
 module CACHE_LRU (

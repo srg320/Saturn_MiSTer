@@ -361,22 +361,22 @@ wire reset = RESET | status[0] | buttons[1];
 wire [15:0] VDP2_DO;
 wire [16:1] RA0_A;
 wire [15:0] RA0_D;
-wire        RA0_WE;
+wire  [1:0] RA0_WE;
 wire        RA0_RD;
 wire [31:0] RA0_Q;
 wire [16:1] RA1_A;
 wire [15:0] RA1_D;
-wire        RA1_WE;
+wire  [1:0] RA1_WE;
 wire        RA1_RD;
 wire [31:0] RA1_Q;
 wire [16:1] RB0_A;
 wire [15:0] RB0_D;
-wire        RB0_WE;
+wire  [1:0] RB0_WE;
 wire        RB0_RD;
 wire [31:0] RB0_Q;
 wire [16:1] RB1_A;
 wire [15:0] RB1_D;
-wire        RB1_WE;
+wire  [1:0] RB1_WE;
 wire        RB1_RD;
 wire [31:0] RB1_Q;
 wire [7:0] r, g, b;
@@ -393,21 +393,20 @@ assign CE_F = ~CE_R;
 	
 VDP2 VDP2
 (
-	.RST_N(~(reset|cart_download)),
+	.RST_N(~(reset) & VDP2_IO_RST_N),
 	.CLK(clk_sys),
 	.CE_R(CE_R),
 	.CE_F(CE_F),
 	
 	.RES_N(1'b1),
 	
-//	.A({13'h1800,vdp2_reg[7:1]}),
-	.DI(vdp2_data),
-	.DO(VDP2_DO),
-	.AD_N(1'b1),
-	.DTEN_N(1'b1),
-	.CS_N(1'b0),
-	.WE_N(~{2{vdp2_wr}}),
-//	.RD_N(vdp2_wr),
+	.DI(VDP2_IO_D),
+	.DO(),
+	.AD_N(VDP2_IO_AD_N),
+	.DTEN_N(VDP2_IO_DTEN_N),
+	.CS_N(VDP2_IO_CS_N),
+	.WE_N({2{VDP2_IO_WE_N}}),
+	.RDY_N(VDP2_IO_RDY_N),
 		
 	.RA0_A(RA0_A),
 	.RA0_D(RA0_D),
@@ -437,7 +436,9 @@ VDP2 VDP2
 	.VS_N(vs),
 	.HS_N(hs),
 	.HBL_N(hblank),
-	.VBL_N(vblank)
+	.VBL_N(vblank),
+	
+	.SCRN_EN(SCRN_EN)
 );
 
 `ifdef DUAL_SDRAM
@@ -458,38 +459,167 @@ sdram2 sdram2
 	.clk(clk_ram),
 	.sync(ce_pix),
 
-	.addr_a0(cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} : {4'b0000,RA0_A}), // 0000000-001FFFF
-	.addr_a1(cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} : {4'b0000,RA1_A}),
-	.din_a(cart_download ? {ioctl_data[7:0],ioctl_data[15:8]} : RA0_D),
-	.wr_a(cart_download ? {2{io_wr&~ioctl_addr[18]&~ioctl_addr[19]}} : {2{RA0_WE}}),
-	.rd_a(cart_download ? 0 : RA0_RD|RA1_RD),
+	.addr_a0(/*cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} :*/ {|RA1_WE,3'b0000,RA0_A}), // 0000000-001FFFF
+	.addr_a1(/*cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} :*/ {|RA1_WE,3'b0000,RA1_A}),
+	.din_a(/*cart_download ? {ioctl_data[7:0],ioctl_data[15:8]} :*/ RA0_D),
+	.wr_a(/*cart_download ? {2{io_wr&~ioctl_addr[18]&~ioctl_addr[19]}} :*/ RA0_WE|RA1_WE),
+	.rd_a(/*cart_download ? 0 :*/ RA0_RD|RA1_RD),
 	.dout_a0(RA0_Q),
 	.dout_a1(RA1_Q),
 
-	.addr_b0(cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} : {4'b0000,RB0_A}),
-	.addr_b1(cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} : {4'b0000,RB1_A}),
-	.din_b(cart_download ? {ioctl_data[7:0],ioctl_data[15:8]} : RB0_D),
-	.wr_b(cart_download ? {2{io_wr&ioctl_addr[18]&~ioctl_addr[19]}} : {2{RB0_WE}}),
-	.rd_b(cart_download ? 0 : RB0_RD|RB1_RD),
+	.addr_b0(/*cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} :*/ {|RB1_WE,3'b0000,RB0_A}),
+	.addr_b1(/*cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} :*/ {|RB1_WE,3'b0000,RB1_A}),
+	.din_b(/*cart_download ? {ioctl_data[7:0],ioctl_data[15:8]} :*/ RB0_D),
+	.wr_b(/*cart_download ? {2{io_wr&ioctl_addr[18]&~ioctl_addr[19]}} :*/ RB0_WE|RB1_WE),
+	.rd_b(/*cart_download ? 0 :*/ RB0_RD|RB1_RD),
 	.dout_b0(RB0_Q),
 	.dout_b1(RB1_Q)
 );
 assign SDRAM_CKE = 1;
 
-reg io_wr = 0;
+//reg io_wr = 0;
+reg [3:0] io_state = 0;
+parameter IO_IDLE = 0;
+parameter IO_RST = 1;
+parameter IO_VRAM = 2;
+parameter IO_VRAM2 = 3;
+parameter IO_PAL = 4;
+parameter IO_PAL2 = 5;
+parameter IO_REG = 6;
+parameter IO_REG2 = 7;
+parameter IO_DISPON = 8;
+parameter IO_END = 9;
+
+reg [15:0] VDP2_IO_D;
+reg        VDP2_IO_AD_N;
+reg        VDP2_IO_DTEN_N;
+reg        VDP2_IO_CS_N;
+reg        VDP2_IO_WE_N;
+reg        VDP2_IO_RST_N;
+wire       VDP2_IO_RDY_N;
+	
 always @(posedge clk_sys) begin
-	reg [3:0] wait_cnt;
+//	reg [3:0] wait_cnt;
+//	
+//	if (wait_cnt) wait_cnt <= wait_cnt - 4'd1;
+//	
+//	if (!io_wr && cart_download && ioctl_wr) begin
+//		io_wr <= 1;
+//		wait_cnt <= 4'd15;
+//		ioctl_wait <= 1;
+//	end else if (io_wr && !wait_cnt) begin
+//		io_wr <= 0;
+//		ioctl_wait <= 0;
+//	end
 	
-	if (wait_cnt) wait_cnt <= wait_cnt - 4'd1;
-	
-	if (!io_wr && cart_download && ioctl_wr) begin
-		io_wr <= 1;
-		wait_cnt <= 4'd15;
-		ioctl_wait <= 1;
-	end else if (io_wr && !wait_cnt) begin
-		io_wr <= 0;
-		ioctl_wait <= 0;
-	end
+	reg [1:0] step;
+	case (io_state)
+		IO_IDLE: begin
+			if (cart_download) begin
+				ioctl_wait <= 1;
+				VDP2_IO_RST_N <= 0;
+				io_state <= IO_RST;
+			end
+			step <= 2'd0;
+			VDP2_IO_AD_N <= 1; 
+			VDP2_IO_DTEN_N <= 1; 
+			VDP2_IO_CS_N <= 1; 
+			VDP2_IO_WE_N <= 1;
+		end
+		
+		IO_RST: begin
+			step <= step + 2'd1;
+			if (step == 2'd3) begin
+				VDP2_IO_RST_N <= 1;
+				ioctl_wait <= 0;
+				io_state <= IO_VRAM;
+			end
+		end
+		
+		IO_VRAM: begin
+			if (ioctl_wr) begin
+				ioctl_wait <= 1;
+				io_state <= IO_VRAM2;
+			end
+		end
+		
+		IO_VRAM2: if (CE_R) begin
+			case (step)
+				2'd0: begin VDP2_IO_D <= {12'h0000,1'b0,ioctl_addr[18:16]};  VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; step <= 2'd1; end
+				2'd1: begin VDP2_IO_D <= {ioctl_addr[15:1],1'b0};            VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; step <= 2'd2; end
+				2'd2: begin VDP2_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; VDP2_IO_AD_N <= 0; VDP2_IO_DTEN_N <= 0; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; step <= 2'd3; end
+				2'd3: if (!VDP2_IO_RDY_N) begin                              VDP2_IO_D <= 16'h0000; VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 1; VDP2_IO_WE_N <= 1; step <= 2'd0; end
+			endcase
+			if (step == 2'd3 && !VDP2_IO_RDY_N) begin
+				ioctl_wait <= 0;
+				if (ioctl_addr[19:1] == 19'h3FFFF) io_state <= IO_PAL;
+				else io_state <= IO_VRAM;
+			end
+		end
+		
+		IO_PAL: begin
+			if (ioctl_wr) begin
+				ioctl_wait <= 1;
+				io_state <= IO_PAL2;
+			end
+		end
+		
+		IO_PAL2: if (CE_R) begin
+			case (step)
+				2'd0: begin VDP2_IO_D <= {12'h0001,1'b0,ioctl_addr[18:16]};  VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; end
+				2'd1: begin VDP2_IO_D <= {ioctl_addr[15:1],1'b0};            VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; end
+				2'd2: begin VDP2_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; VDP2_IO_AD_N <= 0; VDP2_IO_DTEN_N <= 0; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; end
+				2'd3: begin VDP2_IO_D <= 16'h0000;                           VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 1; VDP2_IO_WE_N <= 1; end
+			endcase
+			step <= step + 2'd1;
+			if (step == 2'd3) begin
+				ioctl_wait <= 0;
+				if (ioctl_addr[19:1] == 19'h407FF) io_state <= IO_REG;
+				else io_state <= IO_PAL;
+			end
+		end
+		
+		IO_REG: begin
+			if (ioctl_wr) begin
+				ioctl_wait <= 1;
+				io_state <= IO_REG2;
+			end
+		end
+		
+		IO_REG2: if (CE_R) begin
+			case (step)
+				2'd0: begin VDP2_IO_D <= {12'h0001,1'b1,ioctl_addr[18:16]};  VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; end
+				2'd1: begin VDP2_IO_D <= {ioctl_addr[15:1],1'b0};            VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; end
+				2'd2: begin VDP2_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; VDP2_IO_AD_N <= 0; VDP2_IO_DTEN_N <= 0; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; end
+				2'd3: begin VDP2_IO_D <= 16'h0000;                           VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 1; VDP2_IO_WE_N <= 1; end
+			endcase
+			step <= step + 2'd1;
+			if (step == 2'd3) begin
+				ioctl_wait <= 0;
+				if (ioctl_addr[19:1] == 19'h4088F) io_state <= IO_DISPON;
+				else io_state <= IO_REG;
+			end
+		end
+		
+		IO_DISPON: if (CE_R) begin
+			case (step)
+				2'd0: begin VDP2_IO_D <= 16'h0018; VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; end
+				2'd1: begin VDP2_IO_D <= 16'h0000; VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; end
+				2'd2: begin VDP2_IO_D <= 16'h8000; VDP2_IO_AD_N <= 0; VDP2_IO_DTEN_N <= 0; VDP2_IO_CS_N <= 0; VDP2_IO_WE_N <= 0; end
+				2'd3: begin VDP2_IO_D <= 16'h0000; VDP2_IO_AD_N <= 1; VDP2_IO_DTEN_N <= 1; VDP2_IO_CS_N <= 1; VDP2_IO_WE_N <= 1; end
+			endcase
+			step <= step + 2'd1;
+			if (step == 2'd3) begin
+				io_state <= IO_END;
+			end
+		end
+		
+		IO_END: begin
+			if (!cart_download) begin
+				io_state <= IO_IDLE;
+			end
+		end
+	endcase
 end
 
 
@@ -651,12 +781,7 @@ reg        region_set = 0;
 
 
 //debug
-reg       VDP_BGA_EN = 1;
-reg       VDP_BGB_EN = 1;
-reg       VDP_SPR_EN = 1;
-reg [1:0] VDP_BG_GRID_EN = '0;
-reg       VDP_SPR_GRID_EN = 0;
-reg       DBG_PAUSE_EN = 0;
+reg  [4:0] SCRN_EN = 5'b11111;
 
 wire       pressed = ps2_key[9];
 wire [8:0] code    = ps2_key[8:0];
@@ -664,82 +789,20 @@ always @(posedge clk_sys) begin
 	reg old_state = 0;
 
 	old_state <= ps2_key[10];
-
 	if((ps2_key[10] != old_state) && pressed) begin
 		casex(code)
-			'h003: begin VDP_BGA_EN <= ~VDP_BGA_EN; end 	// F5
-			'h00B: begin VDP_BGB_EN <= ~VDP_BGB_EN; end 	// F6
-			'h083: begin VDP_SPR_EN <= ~VDP_SPR_EN; end 	// F7
-			'h00A: begin VDP_BG_GRID_EN[0] <= ~VDP_BG_GRID_EN[0]; end 	// F8
-			'h001: begin VDP_BG_GRID_EN[1] <= ~VDP_BG_GRID_EN[1]; end 	// F9
-			'h009: begin VDP_SPR_GRID_EN <= ~VDP_SPR_GRID_EN; end 	// F10
-			'h078: begin DBG_PAUSE_EN <= ~DBG_PAUSE_EN; end 	// F11
-		endcase
-	end
-end
-
-reg  [7:0] vdp2_reg;
-reg [15:0] vdp2_data;
-reg        vdp2_wr;
-always @(posedge clk_sys) begin
-	reg old_state = 0;
-	
-	reg scrollx_set = 0, scrolly_set = 0, prina_set = 0, dummy_set=0, scrctl_set=0;
-	reg [10:0] scrollx = 0, scrolly = 0;
-	reg [15:0] dummy;
-	reg prina = 0;
-	reg n0lscx = 0;
-
-	old_state <= ps2_key[10];
-
-	if((ps2_key[10] != old_state) && pressed) begin
-		casex(code)
-			'h005: begin scrollx <= scrollx + 11'd1; scrollx_set <= 1; end 	// F1
-			'h006: begin scrollx <= scrollx - 11'd1; scrollx_set <= 1; end 	// F2
-			'h004: begin scrolly <= scrolly + 11'd1; scrolly_set <= 1; end 	// F3
-			'h00C: begin scrolly <= scrolly - 11'd1; scrolly_set <= 1; end 	// F4
-			'h003: begin prina <= ~prina; prina_set <= 1; end 	// F5
-			'h00B: begin n0lscx <= ~n0lscx; scrctl_set <= 1; end 	// F6
+			'h005: begin SCRN_EN[0] <= ~SCRN_EN[0]; end 	// F1
+			'h006: begin SCRN_EN[1] <= ~SCRN_EN[1]; end 	// F2
+			'h004: begin SCRN_EN[2] <= ~SCRN_EN[2]; end 	// F3
+			'h00C: begin SCRN_EN[3] <= ~SCRN_EN[3]; end 	// F4
+			'h003: begin SCRN_EN[4] <= ~SCRN_EN[4]; end 	// F5
+			'h00B: begin  end 	// F6
 			'h083: begin  end 	// F7
 			'h00A: begin  end 	// F8
 			'h001: begin  end 	// F9
 			'h009: begin  end 	// F10
-			'h078: begin dummy <= dummy + 16'd1; dummy_set <= 1; end 	// F11
+			'h078: begin  end 	// F11
 		endcase
-	end
-	
-	vdp2_wr <= 0;
-	if (CE_R) begin
-		if (scrollx_set) begin
-			vdp2_reg <= 'h70; 
-			vdp2_data <= {5'h00,scrollx};
-			vdp2_wr <= 1;
-			scrollx_set <= 0;
-		end 
-		else if (scrolly_set) begin
-			vdp2_reg <= 'h74; 
-			vdp2_data <= {5'h00,scrolly};
-			vdp2_wr <= 1;
-			scrolly_set <= 0;
-		end 
-		else if (prina_set) begin
-			vdp2_reg <= 'hF8; 
-			vdp2_data <= prina ? 16'h0605 : 16'h0506;
-			vdp2_wr <= 1;
-			prina_set <= 0;
-		end 
-		else if (scrctl_set) begin
-			vdp2_reg <= 'h9A; 
-			vdp2_data <= n0lscx ? 16'h0002 : 16'h0000;
-			vdp2_wr <= 1;
-			scrctl_set <= 0;
-		end 
-		else if (dummy_set) begin
-			vdp2_reg <= vdp2_reg + 8'd2; 
-			vdp2_data <= dummy;
-			vdp2_wr <= 1;
-			dummy_set <= 0;
-		end 
 	end
 end
 

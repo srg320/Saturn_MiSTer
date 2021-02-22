@@ -240,7 +240,7 @@ localparam CONF_STR = {
 
 wire [63:0] status;
 wire  [1:0] buttons;
-wire [11:0] joystick_0,joystick_1,joystick_2,joystick_3,joystick_4;
+wire [12:0] joystick_0,joystick_1,joystick_2,joystick_3,joystick_4;
 wire  [7:0] joy0_x,joy0_y,joy1_x,joy1_y;
 wire        ioctl_download;
 wire        ioctl_wr;
@@ -355,6 +355,9 @@ pll pll
 
 wire reset = RESET | status[0] | buttons[1];
 
+wire [15:0] joy1 = {~joystick_0[0],~joystick_0[1],~joystick_0[2],~joystick_0[3],~joystick_0[7],~joystick_0[4],~joystick_0[6],~joystick_0[5],
+                    ~joystick_0[8],~joystick_0[9],~joystick_0[10],~joystick_0[11],~joystick_0[12],3'b111};
+
 //Genesis
 wire [24:0] MEM_A;
 wire [31:0] MEM_DI;
@@ -385,22 +388,22 @@ wire        VDP1_FB1_RD;
 
 wire [16:1] VDP2_RA0_A;
 wire [15:0] VDP2_RA0_D;
-wire        VDP2_RA0_WE;
+wire  [1:0] VDP2_RA0_WE;
 wire        VDP2_RA0_RD;
 wire [31:0] VDP2_RA0_Q;
 wire [16:1] VDP2_RA1_A;
 wire [15:0] VDP2_RA1_D;
-wire        VDP2_RA1_WE;
+wire  [1:0] VDP2_RA1_WE;
 wire        VDP2_RA1_RD;
 wire [31:0] VDP2_RA1_Q;
 wire [16:1] VDP2_RB0_A;
 wire [15:0] VDP2_RB0_D;
-wire        VDP2_RB0_WE;
+wire  [1:0] VDP2_RB0_WE;
 wire        VDP2_RB0_RD;
 wire [31:0] VDP2_RB0_Q;
 wire [16:1] VDP2_RB1_A;
 wire [15:0] VDP2_RB1_D;
-wire        VDP2_RB1_WE;
+wire  [1:0] VDP2_RB1_WE;
 wire        VDP2_RB1_RD;
 wire [31:0] VDP2_RB1_Q;
 
@@ -482,7 +485,11 @@ Saturn saturn
 	.VS_N(vs),
 	.HS_N(hs),
 	.HBL_N(hblank),
-	.VBL_N(vblank)
+	.VBL_N(vblank),
+	
+	.JOY1(joy1),
+	
+	.SCRN_EN(SCRN_EN)
 );
 
 assign MEM_DI     = ddr_do;
@@ -577,20 +584,20 @@ sdram2 sdram2
 	
 	.init(~locked),
 	.clk(clk_ram),
-	.rst(reset),
+	.sync(ce_pix),
 
-	.addr_a0({VDP2_RA1_WE,3'b0000,VDP2_RA0_A}), // 0000000-001FFFF
-	.addr_a1({VDP2_RA1_WE,3'b0000,VDP2_RA1_A}),
+	.addr_a0({|VDP2_RA1_WE,3'b0000,VDP2_RA0_A}), // 0000000-001FFFF
+	.addr_a1({|VDP2_RA1_WE,3'b0000,VDP2_RA1_A}),
 	.din_a(VDP2_RA0_D),
-	.wr_a({2{VDP2_RA0_WE|VDP2_RA1_WE}}),
+	.wr_a(VDP2_RA0_WE|VDP2_RA1_WE),
 	.rd_a(VDP2_RA0_RD|VDP2_RA1_RD),
 	.dout_a0(VDP2_RA0_Q),
 	.dout_a1(VDP2_RA1_Q),
 
-	.addr_b0({VDP2_RB1_WE,3'b0000,VDP2_RB0_A}),
-	.addr_b1({VDP2_RB1_WE,3'b0000,VDP2_RB1_A}),
+	.addr_b0({|VDP2_RB1_WE,3'b0000,VDP2_RB0_A}),
+	.addr_b1({|VDP2_RB1_WE,3'b0000,VDP2_RB1_A}),
 	.din_b(VDP2_RB0_D),
-	.wr_b({2{VDP2_RB0_WE|VDP2_RB1_WE}}),
+	.wr_b(VDP2_RB0_WE|VDP2_RB1_WE),
 	.rd_b(VDP2_RB0_RD|VDP2_RB1_RD),
 	.dout_b0(VDP2_RB0_Q),
 	.dout_b1(VDP2_RB1_Q)
@@ -699,12 +706,7 @@ reg        region_set = 0;
 
 
 //debug
-reg       VDP_BGA_EN = 1;
-reg       VDP_BGB_EN = 1;
-reg       VDP_SPR_EN = 1;
-reg [1:0] VDP_BG_GRID_EN = '0;
-reg       VDP_SPR_GRID_EN = 0;
-reg       DBG_PAUSE_EN = 0;
+reg  [4:0] SCRN_EN = 5'b11111;
 
 wire       pressed = ps2_key[9];
 wire [8:0] code    = ps2_key[8:0];
@@ -712,16 +714,19 @@ always @(posedge clk_sys) begin
 	reg old_state = 0;
 
 	old_state <= ps2_key[10];
-
 	if((ps2_key[10] != old_state) && pressed) begin
 		casex(code)
-			'h003: begin VDP_BGA_EN <= ~VDP_BGA_EN; end 	// F5
-			'h00B: begin VDP_BGB_EN <= ~VDP_BGB_EN; end 	// F6
-			'h083: begin VDP_SPR_EN <= ~VDP_SPR_EN; end 	// F7
-			'h00A: begin VDP_BG_GRID_EN[0] <= ~VDP_BG_GRID_EN[0]; end 	// F8
-			'h001: begin VDP_BG_GRID_EN[1] <= ~VDP_BG_GRID_EN[1]; end 	// F9
-			'h009: begin VDP_SPR_GRID_EN <= ~VDP_SPR_GRID_EN; end 	// F10
-			'h078: begin DBG_PAUSE_EN <= ~DBG_PAUSE_EN; end 	// F11
+			'h005: begin SCRN_EN[0] <= ~SCRN_EN[0]; end 	// F1
+			'h006: begin SCRN_EN[1] <= ~SCRN_EN[1]; end 	// F2
+			'h004: begin SCRN_EN[2] <= ~SCRN_EN[2]; end 	// F3
+			'h00C: begin SCRN_EN[3] <= ~SCRN_EN[3]; end 	// F4
+			'h003: begin SCRN_EN[4] <= ~SCRN_EN[4]; end 	// F5
+			'h00B: begin  end 	// F6
+			'h083: begin  end 	// F7
+			'h00A: begin  end 	// F8
+			'h001: begin  end 	// F9
+			'h009: begin  end 	// F10
+			'h078: begin  end 	// F11
 		endcase
 	end
 end

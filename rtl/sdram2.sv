@@ -158,7 +158,7 @@ module sdram2
 //			st_num <= 4'd7;
 		end else begin
 			st_num <= st_num + 4'd1;
-			if (!sync && sync_old) st_num <= 4'd6;
+			if (!sync && sync_old) st_num <= 4'd7;
 			state[1] <= state[0];
 			state[2] <= state[1];
 			state[3] <= state[2];
@@ -193,8 +193,8 @@ module sdram2
 		
 		if (data0_read || data1_read) temp <= SDRAM_DQ;
 
-		if (out0_read) dout[out0_bank][15:0] <= temp;
-		if (out1_read) dout[out1_bank][31:16] <= temp;
+		if (out0_read) dout[out0_bank][31:16] <= temp;
+		if (out1_read) dout[out1_bank][15:0] <= temp;
 	end
 		
 	assign {dout_a0,dout_a1,dout_b0,dout_b1} = {dout[0],dout[1],dout[2],dout[3]};
@@ -239,7 +239,7 @@ module sdram2
 		if (mode == MODE_NORMAL) begin
 			casex (ctrl_cmd)
 				CTRL_RAS: SDRAM_A <= {2'b00, a[19:9]};
-				CTRL_CAS: SDRAM_A <= {dqm, 3'b100, a[8:2], a[1] & we};
+				CTRL_CAS: SDRAM_A <= {dqm, 3'b100, a[8:2], a[1] /*& we*/};
 			endcase;
 		end
 		else if (mode == MODE_LDM && ctrl_cmd == CTRL_RAS) SDRAM_A <= MODE;
