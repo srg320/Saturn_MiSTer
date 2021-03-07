@@ -607,6 +607,16 @@ sdram2 sdram2
 
 `endif
 
+//compact_bram sndram
+//(
+//	.clock(clk_sys),
+//	.address(SCSP_RAM_A[17:1]),
+//	.data(SCSP_RAM_D),
+//	.wren(SCSP_RAM_WE),
+//	.q(SCSP_RAM_Q)
+//);
+
+
 spram #(17,8)	sndram_l
 (
 	.clock(clk_sys),
@@ -706,7 +716,7 @@ reg        region_set = 0;
 
 
 //debug
-reg  [4:0] SCRN_EN = 5'b11111;
+reg  [5:0] SCRN_EN = 6'b111111;
 
 wire       pressed = ps2_key[9];
 wire [8:0] code    = ps2_key[8:0];
