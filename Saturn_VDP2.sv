@@ -143,7 +143,7 @@ assign BUTTONS   = osd_btn;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign USER_OUT = '0;
 
-//assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
+assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = '0;
 //assign {SDRAM_CLK, SDRAM_A, SDRAM_BA} = '0;
 //assign SDRAM_DQ = 'Z;
 //assign {SDRAM_DQML, SDRAM_DQMH, SDRAM_nCS, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nWE, SDRAM_CKE} = '1;
@@ -360,10 +360,11 @@ wire reset = RESET | status[0] | buttons[1];
 
 wire [18:1] VDP1_VRAM_A;
 wire [15:0] VDP1_VRAM_D;
-wire [15:0] VDP1_VRAM_Q;
+wire [31:0] VDP1_VRAM_Q;
 wire  [1:0] VDP1_VRAM_WE;
 wire        VDP1_VRAM_RD;
-wire        VDP1_VRAM_RDY;
+wire        VDP1_VRAM_ARDY;
+wire        VDP1_VRAM_DRDY;
 wire [17:1] VDP1_FB0_A;
 wire [15:0] VDP1_FB0_D;
 wire [15:0] VDP1_FB0_Q;
@@ -442,7 +443,8 @@ VDP1 VDP1
 	.VRAM_WE(VDP1_VRAM_WE),
 	.VRAM_RD(VDP1_VRAM_RD),
 	.VRAM_Q(VDP1_VRAM_Q),
-	.VRAM_RDY(VDP1_VRAM_RDY),
+	.VRAM_ARDY(VDP1_VRAM_ARDY),
+	.VRAM_DRDY(VDP1_VRAM_DRDY),
 	
 	.FB0_A(VDP1_FB0_A),
 	.FB0_D(VDP1_FB0_D),
@@ -549,23 +551,23 @@ sdram sdram
 //assign VDP1_VRAM_Q = sdr_do;
 //assign VDP1_VRAM_RDY = ~sdr_busy;
 
-wire [31:0] ddr_do;
-wire        ddr_busy;
-ddram ddram
-(
-	.*,
-	.clk(clk_ram),
-
-	.mem_addr({9'b000000000,VDP1_VRAM_A[18:1]}),
-	.mem_dout(ddr_do),
-	.mem_din({16'h0000,VDP1_VRAM_D}),
-	.mem_rd(VDP1_VRAM_RD),
-	.mem_wr({2'b00,VDP1_VRAM_WE}),
-	.mem_16b(1),
-	.mem_busy(ddr_busy)
-);
-assign VDP1_VRAM_Q = ddr_do[15:0];
-assign VDP1_VRAM_RDY = ~ddr_busy;
+//wire [31:0] ddr_do;
+//wire        ddr_busy;
+//ddram ddram
+//(
+//	.*,
+//	.clk(clk_ram),
+//
+//	.mem_addr({9'b000000000,VDP1_VRAM_A[18:1]}),
+//	.mem_dout(ddr_do),
+//	.mem_din({16'h0000,VDP1_VRAM_D}),
+//	.mem_rd(VDP1_VRAM_RD),
+//	.mem_wr({2'b00,VDP1_VRAM_WE}),
+//	.mem_16b(1),
+//	.mem_busy(ddr_busy)
+//);
+//assign VDP1_VRAM_Q = ddr_do[15:0];
+//assign VDP1_VRAM_RDY = ~ddr_busy;
 
 
 vdp1_fb vdp1_fb0
@@ -587,8 +589,8 @@ vdp1_fb vdp1_fb1
 );
 
 `ifdef DUAL_SDRAM
-wire sdr2_busy;
-wire [15:0] sdr2_do;
+wire [31:0] sdr2ch2_do;
+wire sdr2ch2_ardy,sdr2ch2_drdy;
 sdram2 sdram2
 (
 	.SDRAM_CLK(SDRAM2_CLK),
@@ -600,26 +602,38 @@ sdram2 sdram2
 	.SDRAM_nRAS(SDRAM2_nRAS),
 	.SDRAM_nCAS(SDRAM2_nCAS),
 	
-	.init(~locked),
+	.init(~locked | reset),
 	.clk(clk_ram),
 	.sync(ce_pix),
 
-	.addr_a0(/*cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} :*/ {|RA1_WE,3'b0000,RA0_A}), // 0000000-001FFFF
-	.addr_a1(/*cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} :*/ {|RA1_WE,3'b0000,RA1_A}),
-	.din_a(/*cart_download ? {ioctl_data[7:0],ioctl_data[15:8]} :*/ RA0_D),
-	.wr_a(/*cart_download ? {2{io_wr&~ioctl_addr[18]&~ioctl_addr[19]}} :*/ RA0_WE|RA1_WE),
-	.rd_a(/*cart_download ? 0 :*/ RA0_RD|RA1_RD),
+	.addr_a0({|RA1_WE,3'b0000,RA0_A}), // 0000000-001FFFF
+	.addr_a1({|RA1_WE,3'b0000,RA1_A}),
+	.din_a(RA0_D),
+	.wr_a(RA0_WE|RA1_WE),
+	.rd_a(RA0_RD|RA1_RD),
 	.dout_a0(RA0_Q),
 	.dout_a1(RA1_Q),
 
-	.addr_b0(/*cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} :*/ {|RB1_WE,3'b0000,RB0_A}),
-	.addr_b1(/*cart_download ? {ioctl_addr[17],3'b000,ioctl_addr[16:1]} :*/ {|RB1_WE,3'b0000,RB1_A}),
-	.din_b(/*cart_download ? {ioctl_data[7:0],ioctl_data[15:8]} :*/ RB0_D),
-	.wr_b(/*cart_download ? {2{io_wr&ioctl_addr[18]&~ioctl_addr[19]}} :*/ RB0_WE|RB1_WE),
-	.rd_b(/*cart_download ? 0 :*/ RB0_RD|RB1_RD),
+	.addr_b0({|RB1_WE,3'b0000,RB0_A}),
+	.addr_b1({|RB1_WE,3'b0000,RB1_A}),
+	.din_b(RB0_D),
+	.wr_b(RB0_WE|RB1_WE),
+	.rd_b(RB0_RD|RB1_RD),
 	.dout_b0(RB0_Q),
-	.dout_b1(RB1_Q)
+	.dout_b1(RB1_Q),
+	
+	.ch2addr({3'b000,VDP1_VRAM_A[18:1]}),
+	.ch2din(VDP1_VRAM_D),
+	.ch2wr(VDP1_VRAM_WE),
+	.ch2rd(VDP1_VRAM_RD),
+	.ch2dout(sdr2ch2_do),
+	.ch2ardy(sdr2ch2_ardy),
+	.ch2drdy(sdr2ch2_drdy)
 );
+assign VDP1_VRAM_Q = sdr2ch2_do;
+assign VDP1_VRAM_ARDY = sdr2ch2_ardy;
+assign VDP1_VRAM_DRDY = sdr2ch2_drdy;
+`endif
 
 //reg io_wr = 0;
 reg [3:0] io_state = 0;
@@ -777,45 +791,6 @@ always @(posedge clk_sys) begin
 		end
 	endcase
 end
-
-`else
-
-spram #(15,16,"scroll/vram_a0.mif")	vram_a0
-(
-	.clock(clk_sys),
-	.address(RA0_A),
-	.data('0),
-	.wren(0),
-	.q(RA0_Q)
-);
-
-spram #(15,16,"scroll/vram_a1.mif")	vram_a1
-(
-	.clock(clk_sys),
-	.address(RA1_A),
-	.data('0),
-	.wren(0),
-	.q(RA1_Q)
-);
-
-spram #(15,16,"scroll/vram_b0.mif")	vram_b0
-(
-	.clock(clk_sys),
-	.address(RB0_A),
-	.data('0),
-	.wren(0),
-	.q(RB0_Q)
-);
-
-spram #(15,16,"scroll/vram_b1.mif")	vram_b1
-(
-	.clock(clk_sys),
-	.address(RB1_A),
-	.data('0),
-	.wren(0),
-	.q(RB1_Q)
-);
-`endif
 
 
 wire PAL = status[7];

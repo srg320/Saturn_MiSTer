@@ -195,12 +195,14 @@ assign LED_USER  = cart_download;
 // 0         1         2         3          4         5         6   
 // 01234567890123456789012345678901 23456789012345678901234567890123
 // 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-// XXXXXXXXXXXX XXXXXXXXXXXXXXXXXXX XX XXXXXXXXXXXXX               
+// XXXXXXXXXXXX XXXXXXXXXXXXXXXXXXX XX XXXXXXXXXXXXXx              
 
 `include "build_id.v"
 localparam CONF_STR = {
 	"Saturn;;",
 	"FS,BIN;",
+	"-;",
+	"oG,Time set,No,Yes;",
 	"-;",
 	"P1,Audio & Video;",
 	"P1-;",
@@ -371,10 +373,11 @@ wire        MEM_WAIT_N;
 
 wire [18:1] VDP1_VRAM_A;
 wire [15:0] VDP1_VRAM_D;
-wire [15:0] VDP1_VRAM_Q;
+wire [31:0] VDP1_VRAM_Q;
 wire  [1:0] VDP1_VRAM_WE;
 wire        VDP1_VRAM_RD;
-wire        VDP1_VRAM_RDY;
+wire        VDP1_VRAM_ARDY;
+wire        VDP1_VRAM_DRDY;
 wire [17:1] VDP1_FB0_A;
 wire [15:0] VDP1_FB0_D;
 wire [15:0] VDP1_FB0_Q;
@@ -410,7 +413,9 @@ wire [31:0] VDP2_RB1_Q;
 wire [18:1] SCSP_RAM_A;
 wire [15:0] SCSP_RAM_D;
 wire  [1:0] SCSP_RAM_WE;
+wire        SCSP_RAM_RD;
 wire [15:0] SCSP_RAM_Q;
+wire        SCSP_RAM_RDY;
 
 wire [7:0] r, g, b;
 wire vs,hs;
@@ -424,6 +429,8 @@ Saturn saturn
 	.CE(1),
 	
 	.SRES_N(~status[0]),
+	
+	.TIME_SET(~status[48]),
 	
 	.MEM_A(MEM_A),
 	.MEM_DI(MEM_DI),
@@ -440,17 +447,18 @@ Saturn saturn
 	.VDP1_VRAM_WE(VDP1_VRAM_WE),
 	.VDP1_VRAM_RD(VDP1_VRAM_RD),
 	.VDP1_VRAM_Q(VDP1_VRAM_Q),
-	.VDP1_VRAM_RDY(VDP1_VRAM_RDY),
+	.VDP1_VRAM_ARDY(VDP1_VRAM_ARDY),
+	.VDP1_VRAM_DRDY(VDP1_VRAM_DRDY),
 	.VDP1_FB0_A(VDP1_FB0_A),
 	.VDP1_FB0_D(VDP1_FB0_D),
 	.VDP1_FB0_WE(VDP1_FB0_WE),
 	.VDP1_FB0_RD(VDP1_FB0_RD),
-	.VDP1_FB0_Q('0/*VDP1_FB0_Q*/),
+	.VDP1_FB0_Q(VDP1_FB0_Q),
 	.VDP1_FB1_A(VDP1_FB1_A),
 	.VDP1_FB1_D(VDP1_FB1_D),
 	.VDP1_FB1_WE(VDP1_FB1_WE),
 	.VDP1_FB1_RD(VDP1_FB1_RD),
-	.VDP1_FB1_Q('0/*VDP1_FB1_Q*/),
+	.VDP1_FB1_Q(VDP1_FB1_Q),
 		
 	.VDP2_RA0_A(VDP2_RA0_A),
 	.VDP2_RA0_D(VDP2_RA0_D),
@@ -476,7 +484,9 @@ Saturn saturn
 	.SCSP_RAM_A(SCSP_RAM_A),
 	.SCSP_RAM_D(SCSP_RAM_D),
 	.SCSP_RAM_WE(SCSP_RAM_WE),
+	.SCSP_RAM_RD(SCSP_RAM_RD),
 	.SCSP_RAM_Q(SCSP_RAM_Q),
+	.SCSP_RAM_RDY(SCSP_RAM_RDY),
 	
 	.R(r),
 	.G(g),
@@ -492,9 +502,6 @@ Saturn saturn
 	.SCRN_EN(SCRN_EN)
 );
 
-assign MEM_DI     = ddr_do;
-assign MEM_WAIT_N = ~ddr_busy;
-assign VDP1_VRAM_RDY = ~sdr_busy;
 
 //always @(posedge clk_sys) begin
 //	reg old_busy;
@@ -514,12 +521,12 @@ sdram sdram
 	.clk(clk_ram),
 
 	//MCD: banks 2,3
-	.addr0({6'b000000,VDP1_VRAM_A[18:1]}), // 0000000-007FFFF
-	.din0(VDP1_VRAM_D),
-	.dout0(VDP1_VRAM_Q),
-	.rd0(VDP1_VRAM_RD),
-	.wrl0(VDP1_VRAM_WE[0]),
-	.wrh0(VDP1_VRAM_WE[1]),
+	.addr0({6'b000000,SCSP_RAM_A[18:1]}), // 0000000-007FFFF
+	.din0(SCSP_RAM_D),
+	.dout0(SCSP_RAM_Q),
+	.rd0(SCSP_RAM_RD),
+	.wrl0(SCSP_RAM_WE[0]),
+	.wrh0(SCSP_RAM_WE[1]),
 	.busy0(sdr_busy),
 
 	.addr1('0),
@@ -530,15 +537,15 @@ sdram sdram
 	.wrh1(0),
 	.busy1(sdr_busy1),
 
-	.addr2(cart_download ? {2'b00,ioctl_addr[22:1]} : '0),
-	.din2(cart_download ? {ioctl_data[7:0],ioctl_data[15:8]} : '0),
+	.addr2('0),
+	.din2('0),
 	.dout2(),
 	.rd2(0),
-	.wrl2(/*cart_download ? ioctl_wait :*/ 0),
-	.wrh2(/*cart_download ? ioctl_wait :*/ 0),
+	.wrl2(0),
+	.wrh2(0),
 	.busy2(sdr_busy2)
 );
-
+assign SCSP_RAM_RDY = ~sdr_busy;
 
 always @(posedge clk_sys) begin
 	reg old_busy;
@@ -556,7 +563,6 @@ wire        ddr_busy;
 ddram ddram
 (
 	.*,
-
 	.clk(clk_ram),
 
 	.mem_addr(cart_download ? {3'b000,ioctl_addr[24:1]} : ddr_addr),
@@ -567,10 +573,30 @@ ddram ddram
 	.mem_16b(cart_download | ~RAML_CS_N | ~ROM_CS_N),
 	.mem_busy(ddr_busy)
 );
+assign MEM_DI     = ddr_do;
+assign MEM_WAIT_N = ~ddr_busy;
 
+vdp1_fb vdp1_fb0
+(
+	.clock(clk_sys),
+	.address({VDP1_FB0_A[9:1],VDP1_FB0_A[17:10]}),
+	.data(VDP1_FB0_D),
+	.wren(VDP1_FB0_WE),
+	.q(VDP1_FB0_Q)
+);
+
+vdp1_fb vdp1_fb1
+(
+	.clock(clk_sys),
+	.address({VDP1_FB1_A[9:1],VDP1_FB1_A[17:10]}),
+	.data(VDP1_FB1_D),
+	.wren(VDP1_FB1_WE),
+	.q(VDP1_FB1_Q)
+);
 
 `ifdef DUAL_SDRAM
-
+wire [31:0] sdr2ch2_do;
+wire sdr2ch2_ardy,sdr2ch2_drdy;
 sdram2 sdram2
 (
 	.SDRAM_CLK(SDRAM2_CLK),
@@ -600,40 +626,40 @@ sdram2 sdram2
 	.wr_b(VDP2_RB0_WE|VDP2_RB1_WE),
 	.rd_b(VDP2_RB0_RD|VDP2_RB1_RD),
 	.dout_b0(VDP2_RB0_Q),
-	.dout_b1(VDP2_RB1_Q)
+	.dout_b1(VDP2_RB1_Q),
+	
+	.ch2addr({3'b000,VDP1_VRAM_A[18:1]}),
+	.ch2din(VDP1_VRAM_D),
+	.ch2wr(VDP1_VRAM_WE),
+	.ch2rd(VDP1_VRAM_RD),
+	.ch2dout(sdr2ch2_do),
+	.ch2ardy(sdr2ch2_ardy),
+	.ch2drdy(sdr2ch2_drdy)
 );
-
+assign VDP1_VRAM_Q = sdr2ch2_do;
+assign VDP1_VRAM_ARDY = sdr2ch2_ardy;
+assign VDP1_VRAM_DRDY = sdr2ch2_drdy;
 `else
 
 `endif
 
-//compact_bram sndram
+//spram #(17,8)	sndram_l
 //(
 //	.clock(clk_sys),
 //	.address(SCSP_RAM_A[17:1]),
-//	.data(SCSP_RAM_D),
-//	.wren(SCSP_RAM_WE),
-//	.q(SCSP_RAM_Q)
+//	.data(SCSP_RAM_D[7:0]),
+//	.wren(SCSP_RAM_WE[0]),
+//	.q(SCSP_RAM_Q[7:0])
 //);
-
-
-spram #(17,8)	sndram_l
-(
-	.clock(clk_sys),
-	.address(SCSP_RAM_A[17:1]),
-	.data(SCSP_RAM_D[7:0]),
-	.wren(SCSP_RAM_WE[0]),
-	.q(SCSP_RAM_Q[7:0])
-);
-
-spram #(17,8)	sndram_u
-(
-	.clock(clk_sys),
-	.address(SCSP_RAM_A[17:1]),
-	.data(SCSP_RAM_D[15:8]),
-	.wren(SCSP_RAM_WE[1]),
-	.q(SCSP_RAM_Q[15:8])
-);
+//
+//spram #(17,8)	sndram_u
+//(
+//	.clock(clk_sys),
+//	.address(SCSP_RAM_A[17:1]),
+//	.data(SCSP_RAM_D[15:8]),
+//	.wren(SCSP_RAM_WE[1]),
+//	.q(SCSP_RAM_Q[15:8])
+//);
 
 
 
@@ -731,7 +757,7 @@ always @(posedge clk_sys) begin
 			'h004: begin SCRN_EN[2] <= ~SCRN_EN[2]; end 	// F3
 			'h00C: begin SCRN_EN[3] <= ~SCRN_EN[3]; end 	// F4
 			'h003: begin SCRN_EN[4] <= ~SCRN_EN[4]; end 	// F5
-			'h00B: begin  end 	// F6
+			'h00B: begin SCRN_EN[5] <= ~SCRN_EN[5]; end 	// F6
 			'h083: begin  end 	// F7
 			'h00A: begin  end 	// F8
 			'h001: begin  end 	// F9
