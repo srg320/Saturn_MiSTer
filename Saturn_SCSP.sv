@@ -147,6 +147,9 @@ assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DD
 //assign {SDRAM_CLK, SDRAM_A, SDRAM_BA} = '0;
 //assign SDRAM_DQ = 'Z;
 //assign {SDRAM_DQML, SDRAM_DQMH, SDRAM_nCS, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nWE, SDRAM_CKE} = '1;
+assign {SDRAM2_CLK, SDRAM2_A, SDRAM2_BA} = '0;
+assign SDRAM2_DQ = 'Z;
+assign {SDRAM2_nCS, SDRAM2_nCAS, SDRAM2_nRAS, SDRAM2_nWE} = '1;
 
 always_comb begin
 	if (status[10]) begin
@@ -319,7 +322,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 	.ps2_mouse(ps2_mouse)
 );
 
-assign sd_buff_din = VDP2_DO;
+assign sd_buff_din = '0;
 
 wire code_index = &ioctl_index;
 wire cart_download = ioctl_download & ~code_index;
@@ -358,55 +361,29 @@ pll pll
 
 wire reset = RESET | status[0] | buttons[1];
 
-wire [18:1] VDP1_VRAM_A;
-wire [15:0] VDP1_VRAM_D;
-wire [31:0] VDP1_VRAM_Q;
-wire  [1:0] VDP1_VRAM_WE;
-wire        VDP1_VRAM_RD;
-wire        VDP1_VRAM_ARDY;
-wire        VDP1_VRAM_DRDY;
-wire [17:1] VDP1_FB0_A;
-wire [15:0] VDP1_FB0_D;
-wire [15:0] VDP1_FB0_Q;
-wire        VDP1_FB0_WE;
-wire        VDP1_FB0_RD;
-wire [17:1] VDP1_FB1_A;
-wire [15:0] VDP1_FB1_D;
-wire [15:0] VDP1_FB1_Q;
-wire        VDP1_FB1_WE;
-wire        VDP1_FB1_RD;
-wire [15:0] VOUT;
-wire        VDP_IO_RDY1_N;
-	
-wire [15:0] VDP2_DO;
-wire [16:1] RA0_A;
-wire [15:0] RA0_D;
-wire  [1:0] RA0_WE;
-wire        RA0_RD;
-wire [31:0] RA0_Q;
-wire [16:1] RA1_A;
-wire [15:0] RA1_D;
-wire  [1:0] RA1_WE;
-wire        RA1_RD;
-wire [31:0] RA1_Q;
-wire [16:1] RB0_A;
-wire [15:0] RB0_D;
-wire  [1:0] RB0_WE;
-wire        RB0_RD;
-wire [31:0] RB0_Q;
-wire [16:1] RB1_A;
-wire [15:0] RB1_D;
-wire  [1:0] RB1_WE;
-wire        RB1_RD;
-wire [31:0] RB1_Q;
-wire        DCLK;
-wire        VTIM_N;
-wire        HTIM_N;
-wire        VDP_IO_RDY2_N;
+wire [18:1] SCSP_RAM_A;
+wire [15:0] SCSP_RAM_D;
+wire [15:0] SCSP_RAM_Q;
+wire  [1:0] SCSP_RAM_WE;
+wire        SCSP_RAM_RD;
+wire        SCSP_RAM_RDY;
 
-wire [7:0] r, g, b;
-wire vs,hs;
-wire hblank, vblank;
+bit         SCCE_R;
+bit         SCCE_F;
+bit  [23:1] SCA;
+bit  [15:0] SCDI;
+bit  [15:0] SCDO;
+bit         SCRW_N;
+bit         SCAS_N;
+bit         SCLDS_N;
+bit         SCUDS_N;
+bit         SCDTACK_N;
+bit   [2:0] SCFC;
+bit         SCAVEC_N;
+bit   [2:0] SCIPL_N;
+	
+wire        SCSP_IO_RDY_N;
+	
 
 reg CE_R, CE_F;
 always @(posedge clk_sys) begin
@@ -414,104 +391,79 @@ always @(posedge clk_sys) begin
 end
 assign CE_F = ~CE_R;
 
-VDP1 VDP1
+SCSP SCSP
 (
 	.CLK(clk_sys),
-	.RST_N(~(reset) & (VDP_IO_RST_N | ioctl_index[0])),
-	.CE_R(CE_R),
-	.CE_F(CE_F),
+	.RST_N(~(reset) & (SCSP_IO_RST_N | ioctl_index[0])),
+	.CE(CE_R),
 	
 	.RES_N(1'b1),
-	
-	.DI(VDP_IO_D),
+		
+	.CE_R(CE_R),
+	.CE_F(CE_F),
+	.DI(SCSP_IO_D),
 	.DO(),
-	.AD_N(VDP_IO_AD_N),
-	.DTEN_N(VDP_IO_DTEN_N),
-	.CS_N(VDP_IO_CS1_N),
-	.WE_N({2{VDP_IO_WE_N}}),
-	.RDY_N(VDP_IO_RDY1_N),
+	.AD_N(SCSP_IO_AD_N),
+	.DTEN_N(SCSP_IO_DTEN_N),
+	.CS_N(SCSP_IO_CS_N),
+	.WE_N({2{SCSP_IO_WE_N}}),
+	.RDY_N(SCSP_IO_RDY_N),
+		
+	.SCCE_R(SCCE_R),
+	.SCCE_F(SCCE_F),
+	.SCA(SCA),
+	.SCDI(SCDI),
+	.SCDO(SCDO),
+	.SCRW_N(SCRW_N),
+	.SCAS_N(SCAS_N),
+	.SCLDS_N(SCLDS_N),
+	.SCUDS_N(SCUDS_N),
+	.SCDTACK_N(SCDTACK_N),
+	.SCFC(SCFC),
+	.SCAVEC_N(SCAVEC_N),
+	.SCIPL_N(SCIPL_N),
 	
-	.IRQ_N(), 
-	
-	.DCLK(DCLK),
-	.VTIM_N(VTIM_N),
-	.HTIM_N(HTIM_N),
-	.VOUT(VOUT),
-	
-	.VRAM_A(VDP1_VRAM_A),
-	.VRAM_D(VDP1_VRAM_D),
-	.VRAM_WE(VDP1_VRAM_WE),
-	.VRAM_RD(VDP1_VRAM_RD),
-	.VRAM_Q(VDP1_VRAM_Q),
-	.VRAM_ARDY(VDP1_VRAM_ARDY),
-	.VRAM_DRDY(VDP1_VRAM_DRDY),
-	
-	.FB0_A(VDP1_FB0_A),
-	.FB0_D(VDP1_FB0_D),
-	.FB0_WE(VDP1_FB0_WE),
-	.FB0_RD(VDP1_FB0_RD),
-	.FB0_Q(VDP1_FB0_Q),
-	
-	.FB1_A(VDP1_FB1_A),
-	.FB1_D(VDP1_FB1_D),
-	.FB1_WE(VDP1_FB1_WE),
-	.FB1_RD(VDP1_FB1_RD),
-	.FB1_Q(VDP1_FB1_Q)
+	.RAM_A(SCSP_RAM_A),
+	.RAM_D(SCSP_RAM_D),
+	.RAM_WE(SCSP_RAM_WE),
+	.RAM_RD(SCSP_RAM_RD),
+	.RAM_Q(SCSP_RAM_Q),
+	.RAM_RDY(SCSP_RAM_RDY)
 );
 
-
-VDP2 VDP2
+fx68k M68K
 (
-	.RST_N(~(reset) & (VDP_IO_RST_N | ioctl_index[0])),
-	.CLK(clk_sys),
-	.CE_R(CE_R),
-	.CE_F(CE_F),
+	.clk(clk_sys),
+	.extReset(reset | ~(SCSP_IO_CPURST_N | ioctl_index[0])),
+	.pwrUp(reset),
+	.enPhi1(SCCE_R),
+	.enPhi2(SCCE_F),
+
+	.eab(SCA),
+	.iEdb(SCDO),
+	.oEdb(SCDI),
+	.eRWn(SCRW_N),
+	.ASn(SCAS_N),
+	.LDSn(SCLDS_N),
+	.UDSn(SCUDS_N),
+	.DTACKn(SCDTACK_N),
+
+	.IPL0n(SCIPL_N[0]),
+	.IPL1n(SCIPL_N[1]),
+	.IPL2n(SCIPL_N[2]),
+
+	.VPAn(SCAVEC_N),
 	
-	.RES_N(1'b1),
-	
-	.DI(VDP_IO_D),
-	.DO(),
-	.AD_N(VDP_IO_AD_N),
-	.DTEN_N(VDP_IO_DTEN_N),
-	.CS_N(VDP_IO_CS2_N),
-	.WE_N({2{VDP_IO_WE_N}}),
-	.RDY_N(VDP_IO_RDY2_N),
-	
-	.HTIM_N(HTIM_N),
-	.VTIM_N(VTIM_N),
-	.FBD(VOUT),
-		
-	.RA0_A(RA0_A),
-	.RA0_D(RA0_D),
-	.RA0_WE(RA0_WE),
-	.RA0_RD(RA0_RD),
-	.RA0_Q(RA0_Q),
-	.RA1_A(RA1_A),
-	.RA1_D(RA1_D),
-	.RA1_WE(RA1_WE),
-	.RA1_RD(RA1_RD),
-	.RA1_Q(RA1_Q),
-	.RB0_A(RB0_A),
-	.RB0_D(RB0_D),
-	.RB0_WE(RB0_WE),
-	.RB0_RD(RB0_RD),
-	.RB0_Q(RB0_Q),
-	.RB1_A(RB1_A),
-	.RB1_D(RB1_D),
-	.RB1_WE(RB1_WE),
-	.RB1_RD(RB1_RD),
-	.RB1_Q(RB1_Q),
-	
-	.R(r),
-	.G(g),
-	.B(b),
-	.DCLK(DCLK),
-	.VS_N(vs),
-	.HS_N(hs),
-	.HBL_N(hblank),
-	.VBL_N(vblank),
-	
-	.SCRN_EN(SCRN_EN)
+	.FC0(SCFC[0]),
+	.FC1(SCFC[1]),
+	.FC2(SCFC[2]),
+
+	.BGn(),
+	.BRn(1),
+	.BGACKn(1),
+
+	.BERRn(1),
+	.HALTn(1)
 );
 
 
@@ -523,13 +475,12 @@ sdram sdram
 	.init(~locked),
 	.clk(clk_ram),
 
-	//MCD: banks 2,3
-	.addr0({6'b000000,VDP1_VRAM_A[18:1]}), // 0000000-007FFFF
-	.din0(VDP1_VRAM_D),
-	.dout0(sdr_do),
-	.rd0(VDP1_VRAM_RD & 0),
-	.wrl0(VDP1_VRAM_WE[0] & 0),
-	.wrh0(VDP1_VRAM_WE[1] & 0),
+	.addr0({6'b000000,SCSP_RAM_A[18:1]}), // 0000000-007FFFF
+	.din0(SCSP_RAM_D),
+	.dout0(SCSP_RAM_Q),
+	.rd0(SCSP_RAM_RD),
+	.wrl0(SCSP_RAM_WE[0]),
+	.wrh0(SCSP_RAM_WE[1]),
 	.busy0(sdr_busy),
 
 	.addr1('0),
@@ -548,8 +499,7 @@ sdram sdram
 	.wrh2(0),
 	.busy2(sdr_busy2)
 );
-//assign VDP1_VRAM_Q = sdr_do;
-//assign VDP1_VRAM_RDY = ~sdr_busy;
+assign SCSP_RAM_RDY = ~sdr_busy;
 
 //wire [31:0] ddr_do;
 //wire        ddr_busy;
@@ -570,79 +520,58 @@ sdram sdram
 //assign VDP1_VRAM_RDY = ~ddr_busy;
 
 
-vdp1_fb vdp1_fb0
-(
-	.clock(clk_sys),
-	.address({VDP1_FB0_A[9:1],VDP1_FB0_A[17:10]}),
-	.data(VDP1_FB0_D),
-	.wren(VDP1_FB0_WE),
-	.q(VDP1_FB0_Q)
-);
-
-vdp1_fb vdp1_fb1
-(
-	.clock(clk_sys),
-	.address({VDP1_FB1_A[9:1],VDP1_FB1_A[17:10]}),
-	.data(VDP1_FB1_D),
-	.wren(VDP1_FB1_WE),
-	.q(VDP1_FB1_Q)
-);
-
 `ifdef DUAL_SDRAM
-wire [31:0] sdr2ch2_do;
-wire sdr2ch2_ardy,sdr2ch2_drdy;
-sdram2 sdram2
-(
-	.SDRAM_CLK(SDRAM2_CLK),
-	.SDRAM_A(SDRAM2_A),
-	.SDRAM_BA(SDRAM2_BA),
-	.SDRAM_DQ(SDRAM2_DQ),
-	.SDRAM_nCS(SDRAM2_nCS),
-	.SDRAM_nWE(SDRAM2_nWE),
-	.SDRAM_nRAS(SDRAM2_nRAS),
-	.SDRAM_nCAS(SDRAM2_nCAS),
-	
-	.init(~locked | reset),
-	.clk(clk_ram),
-	.sync(ce_pix),
-
-	.addr_a0({|RA1_WE,3'b0000,RA0_A}), // 0000000-001FFFF
-	.addr_a1({|RA1_WE,3'b0000,RA1_A}),
-	.din_a(RA0_D),
-	.wr_a(RA0_WE|RA1_WE),
-	.rd_a(RA0_RD|RA1_RD),
-	.dout_a0(RA0_Q),
-	.dout_a1(RA1_Q),
-
-	.addr_b0({|RB1_WE,3'b0000,RB0_A}),
-	.addr_b1({|RB1_WE,3'b0000,RB1_A}),
-	.din_b(RB0_D),
-	.wr_b(RB0_WE|RB1_WE),
-	.rd_b(RB0_RD|RB1_RD),
-	.dout_b0(RB0_Q),
-	.dout_b1(RB1_Q),
-	
-	.ch2addr({3'b000,VDP1_VRAM_A[18:1]}),
-	.ch2din(VDP1_VRAM_D),
-	.ch2wr(VDP1_VRAM_WE),
-	.ch2rd(VDP1_VRAM_RD),
-	.ch2dout(sdr2ch2_do),
-	.ch2ardy(sdr2ch2_ardy),
-	.ch2drdy(sdr2ch2_drdy)
-);
-assign VDP1_VRAM_Q = sdr2ch2_do;
-assign VDP1_VRAM_ARDY = sdr2ch2_ardy;
-assign VDP1_VRAM_DRDY = sdr2ch2_drdy;
+//wire [31:0] sdr2ch2_do;
+//wire sdr2ch2_ardy,sdr2ch2_drdy;
+//sdram2 sdram2
+//(
+//	.SDRAM_CLK(SDRAM2_CLK),
+//	.SDRAM_A(SDRAM2_A),
+//	.SDRAM_BA(SDRAM2_BA),
+//	.SDRAM_DQ(SDRAM2_DQ),
+//	.SDRAM_nCS(SDRAM2_nCS),
+//	.SDRAM_nWE(SDRAM2_nWE),
+//	.SDRAM_nRAS(SDRAM2_nRAS),
+//	.SDRAM_nCAS(SDRAM2_nCAS),
+//	
+//	.init(~locked | reset),
+//	.clk(clk_ram),
+//	.sync(ce_pix),
+//
+//	.addr_a0({|RA1_WE,3'b0000,RA0_A}), // 0000000-001FFFF
+//	.addr_a1({|RA1_WE,3'b0000,RA1_A}),
+//	.din_a(RA0_D),
+//	.wr_a(RA0_WE|RA1_WE),
+//	.rd_a(RA0_RD|RA1_RD),
+//	.dout_a0(RA0_Q),
+//	.dout_a1(RA1_Q),
+//
+//	.addr_b0({|RB1_WE,3'b0000,RB0_A}),
+//	.addr_b1({|RB1_WE,3'b0000,RB1_A}),
+//	.din_b(RB0_D),
+//	.wr_b(RB0_WE|RB1_WE),
+//	.rd_b(RB0_RD|RB1_RD),
+//	.dout_b0(RB0_Q),
+//	.dout_b1(RB1_Q),
+//	
+//	.ch2addr({3'b000,VDP1_VRAM_A[18:1]}),
+//	.ch2din(VDP1_VRAM_D),
+//	.ch2wr(VDP1_VRAM_WE),
+//	.ch2rd(VDP1_VRAM_RD),
+//	.ch2dout(sdr2ch2_do),
+//	.ch2ardy(sdr2ch2_ardy),
+//	.ch2drdy(sdr2ch2_drdy)
+//);
+//assign VDP1_VRAM_Q = sdr2ch2_do;
+//assign VDP1_VRAM_ARDY = sdr2ch2_ardy;
+//assign VDP1_VRAM_DRDY = sdr2ch2_drdy;
 `endif
 
-//reg io_wr = 0;
 reg [3:0] io_state = 0;
 parameter IO_IDLE = 0;
 parameter IO_RST = 1;
-parameter IO_VDP1_VRAM = 2;
-parameter IO_VDP1_VRAM2 = 3;
-parameter IO_VRAM = 4;
-parameter IO_VRAM2 = 5;
+parameter IO_RAM = 4;
+parameter IO_RAM2 = 5;
 parameter IO_PAL = 6;
 parameter IO_PAL2 = 7;
 parameter IO_REG = 8;
@@ -651,171 +580,123 @@ parameter IO_DISPON = 10;
 parameter IO_VDP1_VERT = 11;
 parameter IO_END = 12;
 
-reg [15:0] VDP_IO_D;
-reg        VDP_IO_AD_N;
-reg        VDP_IO_DTEN_N;
-reg        VDP_IO_CS1_N;
-reg        VDP_IO_CS2_N;
-reg        VDP_IO_WE_N;
-reg        VDP_IO_RST_N;
+reg [15:0] SCSP_IO_D;
+reg        SCSP_IO_AD_N;
+reg        SCSP_IO_DTEN_N;
+reg        SCSP_IO_CS_N;
+reg        SCSP_IO_WE_N;
+reg        SCSP_IO_RST_N;
+reg        SCSP_IO_CPURST_N;
 	
 always @(posedge clk_sys) begin
 	reg [1:0] step;
-	reg [18:0] vdp1_vram_a = '0;
-	reg [15:0] vdp1_vram_d = '0;
 	
 	case (io_state)
 		IO_IDLE: begin
 			if (cart_download) begin
 				ioctl_wait <= 1;
-				VDP_IO_RST_N <= 0;
+				SCSP_IO_RST_N <= 0;
+				SCSP_IO_CPURST_N <= 0;
 				io_state <= IO_RST;
-			end else if (vert_set) begin
-				vdp1_vram_a <= 19'h1266C;
-				vdp1_vram_d <= vert_xa;
-				io_state <= IO_VDP1_VERT;
 			end
 			step <= 2'd0;
-			VDP_IO_AD_N <= 1; 
-			VDP_IO_DTEN_N <= 1; 
-			VDP_IO_CS1_N <= 1; 
-			VDP_IO_CS2_N <= 1; 
-			VDP_IO_WE_N <= 1;
+			SCSP_IO_AD_N <= 1; 
+			SCSP_IO_DTEN_N <= 1; 
+			SCSP_IO_CS_N <= 1; 
+			SCSP_IO_WE_N <= 1;
 		end
 		
 		IO_RST: begin
 			step <= step + 2'd1;
 			if (step == 2'd3) begin
-				VDP_IO_RST_N <= 1;
+				SCSP_IO_RST_N <= 1;
 				ioctl_wait <= 0;
-				io_state <= !ioctl_index[0] ? IO_VRAM : IO_VDP1_VRAM;
+				io_state <= IO_RAM;
 			end
 		end
 		
-		IO_VDP1_VRAM: begin
+		IO_RAM: begin
 			if (ioctl_wr) begin
 				ioctl_wait <= 1;
-				io_state <= IO_VDP1_VRAM2;
+				io_state <= IO_RAM2;
 			end
 		end
 		
-		IO_VDP1_VRAM2: if (CE_R) begin
+		IO_RAM2: if (CE_R) begin
 			case (step)
-				2'd0: begin VDP_IO_D <= {12'h0000,1'b0,ioctl_addr[18:16]};  VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS1_N <= 0; VDP_IO_WE_N <= 0; step <= 2'd1; end
-				2'd1: begin VDP_IO_D <= {ioctl_addr[15:1],1'b0};            VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS1_N <= 0; VDP_IO_WE_N <= 0; step <= 2'd2; end
-				2'd2: begin VDP_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; VDP_IO_AD_N <= 0; VDP_IO_DTEN_N <= 0; VDP_IO_CS1_N <= 0; VDP_IO_WE_N <= 0; step <= 2'd3; end
-				2'd3: if (!VDP_IO_RDY1_N) begin VDP_IO_D <= 16'h0000;       VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS1_N <= 1; VDP_IO_WE_N <= 1; step <= 2'd0; end
+				2'd0: begin SCSP_IO_D <= {12'h0000,1'b0,ioctl_addr[18:16]};  SCSP_IO_AD_N <= 1; SCSP_IO_DTEN_N <= 1; SCSP_IO_CS_N <= 0; SCSP_IO_WE_N <= 0; step <= 2'd1; end
+				2'd1: begin SCSP_IO_D <= {ioctl_addr[15:1],1'b0};            SCSP_IO_AD_N <= 1; SCSP_IO_DTEN_N <= 1; SCSP_IO_CS_N <= 0; SCSP_IO_WE_N <= 0; step <= 2'd2; end
+				2'd2: begin SCSP_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; SCSP_IO_AD_N <= 0; SCSP_IO_DTEN_N <= 0; SCSP_IO_CS_N <= 0; SCSP_IO_WE_N <= 0; step <= 2'd3; end
+				2'd3: if (!SCSP_IO_RDY_N) begin SCSP_IO_D <= 16'h0000;       SCSP_IO_AD_N <= 1; SCSP_IO_DTEN_N <= 1; SCSP_IO_CS_N <= 1; SCSP_IO_WE_N <= 1; step <= 2'd0; end
 			endcase
-			if (step == 2'd3 && !VDP_IO_RDY1_N) begin
+			if (step == 2'd3 && !SCSP_IO_RDY_N) begin
 				ioctl_wait <= 0;
 				if (ioctl_addr[19:1] == 19'h3FFFF) io_state <= IO_END;
-				else io_state <= IO_VDP1_VRAM;
+				else io_state <= IO_RAM;
 			end
 		end
 		
-		IO_VDP1_VERT: if (CE_R) begin
-			case (step)
-				2'd0: begin VDP_IO_D <= {12'h0000,1'b0,vdp1_vram_a[18:16]}; VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS1_N <= 0; VDP_IO_WE_N <= 0; step <= 2'd1; end
-				2'd1: begin VDP_IO_D <= {vdp1_vram_a[15:1],1'b0};           VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS1_N <= 0; VDP_IO_WE_N <= 0; step <= 2'd2; end
-				2'd2: begin VDP_IO_D <= vdp1_vram_d;                        VDP_IO_AD_N <= 0; VDP_IO_DTEN_N <= 0; VDP_IO_CS1_N <= 0; VDP_IO_WE_N <= 0; step <= 2'd3; end
-				2'd3: if (!VDP_IO_RDY1_N) begin VDP_IO_D <= 16'h0000;       VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS1_N <= 1; VDP_IO_WE_N <= 1; step <= 2'd0; end
-			endcase
-			if (step == 2'd3 && !VDP_IO_RDY1_N) begin
-				case (vdp1_vram_a[4:0])
-					5'h0C: vdp1_vram_d <= vert_ya;
-					5'h0E: vdp1_vram_d <= vert_xb;
-					5'h10: vdp1_vram_d <= vert_yb;
-					5'h12: vdp1_vram_d <= vert_xc;
-					5'h14: vdp1_vram_d <= vert_yc;
-					5'h16: vdp1_vram_d <= vert_xd;
-					5'h18: vdp1_vram_d <= vert_yd;
-				endcase
-				vdp1_vram_a <= vdp1_vram_a + 19'd2;
-				if (vdp1_vram_a == 19'h1267A) io_state <= IO_END;
-			end
-		end
-		
-		IO_VRAM: begin
-			if (ioctl_wr) begin
-				ioctl_wait <= 1;
-				io_state <= IO_VRAM2;
-			end
-		end
-		
-		IO_VRAM2: if (CE_R) begin
-			case (step)
-				2'd0: begin VDP_IO_D <= {12'h0000,1'b0,ioctl_addr[18:16]};  VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; step <= 2'd1; end
-				2'd1: begin VDP_IO_D <= {ioctl_addr[15:1],1'b0};            VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; step <= 2'd2; end
-				2'd2: begin VDP_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; VDP_IO_AD_N <= 0; VDP_IO_DTEN_N <= 0; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; step <= 2'd3; end
-				2'd3: if (!VDP_IO_RDY2_N) begin VDP_IO_D <= 16'h0000;      VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 1; VDP_IO_WE_N <= 1; step <= 2'd0; end
-			endcase
-			if (step == 2'd3 && !VDP_IO_RDY2_N) begin
-				ioctl_wait <= 0;
-				if (ioctl_addr[19:1] == 19'h3FFFF) io_state <= IO_REG;
-				else io_state <= IO_VRAM;
-			end
-		end
-		
-		IO_REG: begin
-			if (ioctl_wr) begin
-				ioctl_wait <= 1;
-				io_state <= IO_REG2;
-			end
-		end
-		
-		IO_REG2: if (CE_R) begin
-			case (step)
-				2'd0: begin VDP_IO_D <= 16'h00018;                          VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
-				2'd1: begin VDP_IO_D <= {ioctl_addr[15:1],1'b0};            VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
-				2'd2: begin VDP_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; VDP_IO_AD_N <= 0; VDP_IO_DTEN_N <= 0; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
-				2'd3: begin VDP_IO_D <= 16'h0000;                           VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 1; VDP_IO_WE_N <= 1; end
-			endcase
-			step <= step + 2'd1;
-			if (step == 2'd3) begin
-				ioctl_wait <= 0;
-				if (ioctl_addr[19:1] == 19'h400FF) io_state <= IO_PAL;
-				else io_state <= IO_REG;
-			end
-		end
-		
-		IO_PAL: begin
-			if (ioctl_wr) begin
-				ioctl_wait <= 1;
-				io_state <= IO_PAL2;
-			end
-		end
-		
-		IO_PAL2: if (CE_R) begin
-			case (step)
-				2'd0: begin VDP_IO_D <= 16'h00010;                          VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
-				2'd1: begin VDP_IO_D <= {ioctl_addr[15:1]-15'h0100,1'b0};   VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
-				2'd2: begin VDP_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; VDP_IO_AD_N <= 0; VDP_IO_DTEN_N <= 0; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
-				2'd3: begin VDP_IO_D <= 16'h0000;                           VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 1; VDP_IO_WE_N <= 1; end
-			endcase
-			step <= step + 2'd1;
-			if (step == 2'd3) begin
-				ioctl_wait <= 0;
-				if (ioctl_addr[19:1] == 19'h408FF) io_state <= IO_DISPON;
-				else io_state <= IO_PAL;
-			end
-		end
-		
-		IO_DISPON: if (CE_R) begin
-			case (step)
-				2'd0: begin VDP_IO_D <= 16'h0018; VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
-				2'd1: begin VDP_IO_D <= 16'h0000; VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
-				2'd2: begin VDP_IO_D <= 16'h8000; VDP_IO_AD_N <= 0; VDP_IO_DTEN_N <= 0; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
-				2'd3: begin VDP_IO_D <= 16'h0000; VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 1; VDP_IO_WE_N <= 1; end
-			endcase
-			step <= step + 2'd1;
-			if (step == 2'd3) begin
-				io_state <= IO_END;
-			end
-		end
+//		IO_REG: begin
+//			if (ioctl_wr) begin
+//				ioctl_wait <= 1;
+//				io_state <= IO_REG2;
+//			end
+//		end
+//		
+//		IO_REG2: if (CE_R) begin
+//			case (step)
+//				2'd0: begin VDP_IO_D <= 16'h00018;                          VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
+//				2'd1: begin VDP_IO_D <= {ioctl_addr[15:1],1'b0};            VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
+//				2'd2: begin VDP_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; VDP_IO_AD_N <= 0; VDP_IO_DTEN_N <= 0; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
+//				2'd3: begin VDP_IO_D <= 16'h0000;                           VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 1; VDP_IO_WE_N <= 1; end
+//			endcase
+//			step <= step + 2'd1;
+//			if (step == 2'd3) begin
+//				ioctl_wait <= 0;
+//				if (ioctl_addr[19:1] == 19'h400FF) io_state <= IO_PAL;
+//				else io_state <= IO_REG;
+//			end
+//		end
+//		
+//		IO_PAL: begin
+//			if (ioctl_wr) begin
+//				ioctl_wait <= 1;
+//				io_state <= IO_PAL2;
+//			end
+//		end
+//		
+//		IO_PAL2: if (CE_R) begin
+//			case (step)
+//				2'd0: begin VDP_IO_D <= 16'h00010;                          VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
+//				2'd1: begin VDP_IO_D <= {ioctl_addr[15:1]-15'h0100,1'b0};   VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
+//				2'd2: begin VDP_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; VDP_IO_AD_N <= 0; VDP_IO_DTEN_N <= 0; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
+//				2'd3: begin VDP_IO_D <= 16'h0000;                           VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 1; VDP_IO_WE_N <= 1; end
+//			endcase
+//			step <= step + 2'd1;
+//			if (step == 2'd3) begin
+//				ioctl_wait <= 0;
+//				if (ioctl_addr[19:1] == 19'h408FF) io_state <= IO_DISPON;
+//				else io_state <= IO_PAL;
+//			end
+//		end
+//		
+//		IO_DISPON: if (CE_R) begin
+//			case (step)
+//				2'd0: begin VDP_IO_D <= 16'h0018; VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
+//				2'd1: begin VDP_IO_D <= 16'h0000; VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
+//				2'd2: begin VDP_IO_D <= 16'h8000; VDP_IO_AD_N <= 0; VDP_IO_DTEN_N <= 0; VDP_IO_CS2_N <= 0; VDP_IO_WE_N <= 0; end
+//				2'd3: begin VDP_IO_D <= 16'h0000; VDP_IO_AD_N <= 1; VDP_IO_DTEN_N <= 1; VDP_IO_CS2_N <= 1; VDP_IO_WE_N <= 1; end
+//			endcase
+//			step <= step + 2'd1;
+//			if (step == 2'd3) begin
+//				io_state <= IO_END;
+//			end
+//		end
 		
 		IO_END: begin
 			if (!cart_download) begin
 				io_state <= IO_IDLE;
+				SCSP_IO_CPURST_N <= 1;
 			end
 		end
 	endcase
@@ -842,7 +723,9 @@ always @(posedge clk_sys) begin
 end
 
 
-
+reg [7:0] r=0, g=0, b=0;
+reg vs=0,hs=0;
+reg hblank=0, vblank=0;
 
 
 assign VGA_F1 = 0;
@@ -860,7 +743,7 @@ reg [1:0] res = 2'b01;
 //	if(old_vbl & ~vblank) res <= resolution;
 //end
 
-wire ce_pix = DCLK;
+wire ce_pix = 0;
 wire [2:0] scale = status[3:1];
 wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
 

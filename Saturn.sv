@@ -499,7 +499,8 @@ Saturn saturn
 	
 	.JOY1(joy1),
 	
-	.SCRN_EN(SCRN_EN)
+	.SCRN_EN(SCRN_EN),
+	.PAUSE_EN(DBG_PAUSE_EN)
 );
 
 
@@ -520,7 +521,6 @@ sdram sdram
 	.init(~locked),
 	.clk(clk_ram),
 
-	//MCD: banks 2,3
 	.addr0({6'b000000,SCSP_RAM_A[18:1]}), // 0000000-007FFFF
 	.din0(SCSP_RAM_D),
 	.dout0(SCSP_RAM_Q),
@@ -743,6 +743,7 @@ reg        region_set = 0;
 
 //debug
 reg  [5:0] SCRN_EN = 6'b111111;
+reg        DBG_PAUSE_EN = 0;
 
 wire       pressed = ps2_key[9];
 wire [8:0] code    = ps2_key[8:0];
@@ -763,6 +764,7 @@ always @(posedge clk_sys) begin
 			'h001: begin  end 	// F9
 			'h009: begin  end 	// F10
 			'h078: begin  end 	// F11
+			'h177: begin DBG_PAUSE_EN <= ~DBG_PAUSE_EN; end 	// Pause
 		endcase
 	end
 end
