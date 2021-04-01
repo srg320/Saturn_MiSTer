@@ -414,6 +414,7 @@ wire [18:1] SCSP_RAM_A;
 wire [15:0] SCSP_RAM_D;
 wire  [1:0] SCSP_RAM_WE;
 wire        SCSP_RAM_RD;
+wire        SCSP_RAM_CS;
 wire [15:0] SCSP_RAM_Q;
 wire        SCSP_RAM_RDY;
 
@@ -422,11 +423,22 @@ wire vs,hs;
 wire ce_pix;
 wire hblank, vblank;
 
+wire SCSP_CE;
+CEGen SCSP_CEGen
+(
+	.CLK(clk_sys),
+	.RST_N(~reset),
+	.IN_CLK(53693175),
+	.OUT_CLK(22579200),
+	.CE(SCSP_CE)
+);
+
 Saturn saturn
 (
 	.RST_N(~(reset|cart_download)),
 	.CLK(clk_sys),
 	.CE(1),
+	.SCSP_CE(SCSP_CE),
 	
 	.SRES_N(~status[0]),
 	
@@ -485,6 +497,7 @@ Saturn saturn
 	.SCSP_RAM_D(SCSP_RAM_D),
 	.SCSP_RAM_WE(SCSP_RAM_WE),
 	.SCSP_RAM_RD(SCSP_RAM_RD),
+	.SCSP_RAM_CS(SCSP_RAM_CS),
 	.SCSP_RAM_Q(SCSP_RAM_Q),
 	.SCSP_RAM_RDY(SCSP_RAM_RDY),
 	
@@ -497,6 +510,9 @@ Saturn saturn
 	.HBL_N(hblank),
 	.VBL_N(vblank),
 	
+	.SOUND_L(AUDIO_L),
+	.SOUND_R(AUDIO_R),
+		
 	.JOY1(joy1),
 	
 	.SCRN_EN(SCRN_EN),
@@ -524,9 +540,9 @@ sdram sdram
 	.addr0({6'b000000,SCSP_RAM_A[18:1]}), // 0000000-007FFFF
 	.din0(SCSP_RAM_D),
 	.dout0(SCSP_RAM_Q),
-	.rd0(SCSP_RAM_RD),
-	.wrl0(SCSP_RAM_WE[0]),
-	.wrh0(SCSP_RAM_WE[1]),
+	.rd0(SCSP_RAM_RD & SCSP_RAM_CS),
+	.wrl0(SCSP_RAM_WE[0] & SCSP_RAM_CS),
+	.wrh0(SCSP_RAM_WE[1] & SCSP_RAM_CS),
 	.busy0(sdr_busy),
 
 	.addr1('0),
@@ -688,7 +704,7 @@ end
 
 
 assign VGA_F1 = 0;
-assign {AUDIO_L,AUDIO_R} = '0;
+//assign {AUDIO_L,AUDIO_R} = '0;
 
 reg interlace = 0;
 reg [1:0] resolution = 2'b01;
