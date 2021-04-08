@@ -1,5 +1,6 @@
 set_global_assignment -name QIP_FILE rtl/FX68K/fx68k.qip
 set_global_assignment -name QIP_FILE ../SH2/SH7604/SH7604.qip
+set_global_assignment -name QIP_FILE ../SH2/SH7034/SH7034.qip
 set_global_assignment -name VERILOG_FILE SH_mem.v
 set_global_assignment -name SYSTEMVERILOG_FILE SH7604_mem.sv
 set_global_assignment -name QIP_FILE ../Saturn/Saturn.qip
