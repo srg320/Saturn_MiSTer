@@ -203,37 +203,8 @@ assign LED_USER  = cart_download;
 `include "build_id.v"
 localparam CONF_STR = {
 	"Saturn;;",
-	"FS0,BIN;",
-	"FS1,BIN;",
+	"S0,CUE,Insert Disk;",
 	"-;",
-	"P1,Audio & Video;",
-	"P1-;",
-	"P1OA,Aspect Ratio,4:3,16:9;",
-	"P1OU,320x224 Aspect,Original,Corrected;",
-	"P1O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
-	"P1-;",
-	"P1OT,Border,No,Yes;",
-	"P1oEF,Composite Blend,Off,On,Adaptive;",
-	"P1-;",
-	"P1OEF,Audio Filter,Model 1,Model 2,Minimal,No Filter;",
-	"P1OB,FM Chip,YM2612,YM3438;",
-	"P1ON,HiFi PCM,No,Yes;",
-
-	"P2,Input;",
-	"P2-;",
-	"P2O4,Swap Joysticks,No,Yes;",
-	"P2O5,6 Buttons Mode,No,Yes;",
-	"P2o57,Multitap,Disabled,4-Way,TeamPlayer: Port1,TeamPlayer: Port2,J-Cart;",
-	"P2-;",
-	"P2OIJ,Mouse,None,Port1,Port2;",
-	"P2OK,Mouse Flip Y,No,Yes;",
-	"P2-;",
-	"P2oD,Serial,OFF,SNAC;",
-	"P2-;",
-	"P2o89,Gun Control,Disabled,Joy1,Joy2,Mouse;",
-	"D4P2oA,Gun Fire,Joy,Mouse;",
-	"D4P2oBC,Cross,Small,Medium,Big,None;",
-
 	"-;",
 	"R0,Reset;",
 	"J1,A,B,C,Start,Mode,X,Y,Z;",
@@ -268,6 +239,8 @@ wire [63:0] img_size;
 wire        forced_scandoubler;
 wire [10:0] ps2_key;
 wire [24:0] ps2_mouse;
+
+wire [35:0] EXT_BUS;
 
 wire [21:0] gamma_bus;
 wire [15:0] sdram_sz;
@@ -319,13 +292,28 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 	.sdram_sz(sdram_sz),
 
 	.ps2_key(ps2_key),
-	.ps2_mouse(ps2_mouse)
+	.ps2_mouse(ps2_mouse),
+
+	.EXT_BUS(EXT_BUS)
+
 );
 
 assign sd_buff_din = '0;
 
-wire code_index = &ioctl_index;
-wire cart_download = ioctl_download & ~code_index;
+
+reg [96:0] cd_in;
+wire [96:0] cd_out;
+hps_ext hps_ext
+(
+	.clk_sys(clk_sys),
+	.EXT_BUS(EXT_BUS),
+	.cd_in(cd_in),
+	.cd_out(cd_out)
+);
+
+
+wire cart_download = ioctl_download & (ioctl_index[5:0] <= 6'h01);
+wire cdd_download = ioctl_download & (ioctl_index[5:0] == 6'h02);
 
 reg osd_btn = 0;
 //always @(posedge clk_sys) begin
@@ -361,6 +349,8 @@ pll pll
 
 wire reset = RESET | status[0] | buttons[1];
 
+
+	
 wire [18:1] CD_RAM_A;
 wire [15:0] CD_RAM_D;
 wire [15:0] CD_RAM_Q;
@@ -414,14 +404,14 @@ CD #("sh7034.mif") cd
 	
 	.CE_R(CE_R),
 	.CE_F(CE_F),
-	.AA('0),
-	.ADI('0),
+	.AA(CD_AA),
+	.ADI(CD_AD),
 	.ADO(),
 	.AFC('0),
-	.ACS2_N(1'b1),
-	.ARD_N(1'b1),
-	.AWRL_N(1'b1),
-	.AWRU_N(1'b1),
+	.ACS2_N(CD_ACS2_N),
+	.ARD_N(CD_ARD_N),
+	.AWRL_N(CD_AWRL_N),
+	.AWRU_N(CD_AWRU_N),
 	.ATIM0_N(1'b1),
 	.ATIM2_N(1'b1),
 	.AWAIT_N(),
@@ -446,34 +436,69 @@ CD #("sh7034.mif") cd
 );
 
 reg [7:0] HOST_COMM[12];
-reg [7:0] CDD_STAT[12] = '{8'h00,8'h00,8'h00,8'h00,8'h00,8'h00,8'h00,8'h00,8'h00,8'h00,8'h00,8'hFF};
+reg [7:0] CDD_STAT[12] = '{8'h12,8'h41,8'h01,8'h01,8'h00,8'h02,8'h03,8'h04,8'h00,8'h04,8'h03,8'h9A};
+reg cdd_trans_start = 0;
+reg [3:0] cdd_trans_wait = '0;
+always @(posedge clk_sys) begin
+	reg cd_out96_last = 1;
+
+	if (cd_out[96] != cd_out96_last)  begin
+		cd_out96_last <= cd_out[96];
+		{CDD_STAT[11],CDD_STAT[10],CDD_STAT[9],CDD_STAT[8],CDD_STAT[7],CDD_STAT[6],CDD_STAT[5],CDD_STAT[4],CDD_STAT[3],CDD_STAT[2],CDD_STAT[1],CDD_STAT[0]} <= cd_out[95:0];
+		cdd_trans_start <= 1;
+		cdd_trans_wait <= '1;
+	end else if (cdd_trans_wait) begin
+		cdd_trans_wait <= cdd_trans_wait - 1;
+	end else 
+		cdd_trans_start <= 0;
+	
+	if (cdd_comm_rdy) begin
+		cd_in[95:0] <= {HOST_COMM[11],HOST_COMM[10],HOST_COMM[9],HOST_COMM[8],HOST_COMM[7],HOST_COMM[6],HOST_COMM[5],HOST_COMM[4],HOST_COMM[3],HOST_COMM[2],HOST_COMM[1],HOST_COMM[0]};
+		cd_in[96] <= ~cd_in[96];
+	end
+
+end
+		
 reg [7:0] HOST_DATA = '0;
 reg [7:0] CDD_DATA = '0;
-reg cdd_trans_start = 0;
 reg cdd_trans_next = 0;
 reg cdd_trans_done = 0;
+reg cdd_comm_rdy = 0;
 always @(posedge clk_sys) begin
 	reg [3:0] byte_cnt = '0;
 	reg [2:0] bit_cnt = '0;
 	reg COMCLK_OLD = 0;
 	
+	if (cdd_trans_start) CD_COMREQ_N <= 1;
 	if (cdd_trans_next) CD_COMREQ_N <= 0;
 	
 	COMCLK_OLD <= CD_COMCLK;
 	cdd_trans_done <= 0;
-	if (CD_COMCLK && !COMCLK_OLD) begin
+	if (reset) begin
+		cdd_trans_done <= 0;
+		bit_cnt <= '0;
+	end else if ((cdd_trans_start && !cdd_trans_wait) || dbg_cdd_trans_start) begin
+		cdd_trans_done <= 0;
+		bit_cnt <= '0;
+	end else if (!CD_COMCLK && COMCLK_OLD) begin
+		{CDD_DATA,CD_CDATA} <= {1'b0,CDD_DATA};
+		
+	end else if (CD_COMCLK && !COMCLK_OLD) begin
 		HOST_DATA <= {CD_HDATA,HOST_DATA[7:1]};
 		CD_COMREQ_N <= 1;
 		bit_cnt <= bit_cnt + 3'd1;
 		if (bit_cnt == 3'd7) begin
 			cdd_trans_done <= 1;
 		end
-	end else if (!CD_COMCLK && COMCLK_OLD) begin
-		{CDD_DATA,CD_CDATA} <= {1'b0,CDD_DATA};
 	end
 	
 	cdd_trans_next <= 0;
-	if (cdd_trans_start) begin
+	cdd_comm_rdy <= 0;
+	if (reset) begin
+		cdd_trans_next <= 0;
+		cdd_comm_rdy <= 0;
+		byte_cnt <= '0;
+	end else if ((cdd_trans_start && !cdd_trans_wait) || dbg_cdd_trans_start) begin
 		CDD_DATA <= CDD_STAT[0];
 		CD_COMSYNC_N <= 0;
 		byte_cnt <= 4'd0;
@@ -482,11 +507,15 @@ always @(posedge clk_sys) begin
 		HOST_COMM[byte_cnt] <= HOST_DATA;
 		CD_COMSYNC_N <= 1;
 		byte_cnt <= byte_cnt + 4'd1;
-		if (byte_cnt == 4'd11) begin
-//			byte_cnt <= 4'd0;
-		end else begin
+		if (byte_cnt < 4'd11) begin
 			CDD_DATA <= CDD_STAT[byte_cnt + 4'd1];
 			cdd_trans_next <= 1;
+		end else if (byte_cnt == 4'd11) begin
+			CDD_DATA <= 8'h00;
+			cdd_trans_next <= 1;
+			cdd_comm_rdy <= 1;
+		end else begin
+			
 		end
 	end
 end
@@ -595,20 +624,16 @@ assign CD_RAM_RDY = ~sdr_busy;
 reg [3:0] io_state = 0;
 parameter IO_IDLE = 0;
 parameter IO_RST = 1;
-parameter IO_RAM = 4;
-parameter IO_RAM2 = 5;
-parameter IO_COMM = 6;
-parameter IO_COMM2 = 7;
+parameter IO_COMM = 4;
+parameter IO_COMM2 = 5;
 parameter IO_END = 12;
 
-reg [15:0] SCSP_IO_D;
-reg        SCSP_IO_AD_N;
-reg        SCSP_IO_DTEN_N;
-reg        SCSP_IO_CS_N;
-reg        SCSP_IO_WE_N;
-reg        SCSP_IO_RST_N;
-reg        SCSP_IO_CPURST_N;
-wire       SCSP_IO_RDY_N = 1;
+reg      [14:1] CD_AA;
+reg      [15:0] CD_AD;
+reg             CD_ACS2_N;
+reg             CD_ARD_N;
+reg             CD_AWRL_N;
+reg             CD_AWRU_N;
 	
 always @(posedge clk_sys) begin
 	reg [1:0] step;
@@ -617,76 +642,47 @@ always @(posedge clk_sys) begin
 	
 	case (io_state)
 		IO_IDLE: begin
-			if (cart_download) begin
-				ioctl_wait <= 1;
-				SCSP_IO_RST_N <= 0;
-				SCSP_IO_CPURST_N <= 0;
-				io_state <= IO_RST;
-			end else if (comm_set) begin
-				ram_addr <= comm_addr;
+			if (comm_set) begin
 				data_pos <= '0;
 				io_state <= IO_COMM;
 			end
 			step <= 2'd0;
-			SCSP_IO_AD_N <= 1; 
-			SCSP_IO_DTEN_N <= 1; 
-			SCSP_IO_CS_N <= 1; 
-			SCSP_IO_WE_N <= 1;
+			CD_ACS2_N <= 1; 
+			CD_ARD_N <= 1; 
+			CD_AWRL_N <= 1; 
+			CD_AWRU_N <= 1;
 		end
 		
 		IO_RST: begin
 			step <= step + 2'd1;
 			if (step == 2'd3) begin
-				SCSP_IO_RST_N <= 1;
-				ioctl_wait <= 0;
-				io_state <= IO_RAM;
+				io_state <= IO_COMM;
 			end
 		end
 		
-		IO_RAM: begin
-			if (ioctl_wr) begin
-				ioctl_wait <= 1;
-				io_state <= IO_RAM2;
-			end
-		end
-		
-		IO_RAM2: if (CE_R) begin
-			case (step)
-				2'd0: begin SCSP_IO_D <= {12'h0000,1'b0,ioctl_addr[18:16]};  SCSP_IO_AD_N <= 1; SCSP_IO_DTEN_N <= 1; SCSP_IO_CS_N <= 0; SCSP_IO_WE_N <= 0; step <= 2'd1; end
-				2'd1: begin SCSP_IO_D <= {ioctl_addr[15:1],1'b0};            SCSP_IO_AD_N <= 1; SCSP_IO_DTEN_N <= 1; SCSP_IO_CS_N <= 0; SCSP_IO_WE_N <= 0; step <= 2'd2; end
-				2'd2: begin SCSP_IO_D <= {ioctl_data[7:0],ioctl_data[15:8]}; SCSP_IO_AD_N <= 0; SCSP_IO_DTEN_N <= 0; SCSP_IO_CS_N <= 0; SCSP_IO_WE_N <= 0; step <= 2'd3; end
-				2'd3: if (!SCSP_IO_RDY_N) begin SCSP_IO_D <= 16'h0000;       SCSP_IO_AD_N <= 1; SCSP_IO_DTEN_N <= 1; SCSP_IO_CS_N <= 1; SCSP_IO_WE_N <= 1; step <= 2'd0; end
-			endcase
-			if (step == 2'd3 && !SCSP_IO_RDY_N) begin
-				ioctl_wait <= 0;
-				if (ioctl_addr[19:1] == 19'h3FFFF) io_state <= IO_END;
-				else io_state <= IO_RAM;
-			end
-		end
-		
-		IO_COMM: begin
+		IO_COMM: if (CE_R) begin
+			CD_AA <= 14'h000C + (data_pos*2);
+			CD_AD <= comm_data[data_pos];
+			CD_ACS2_N <= 0; 
+			CD_ARD_N <= 1; 
+			CD_AWRL_N <= 0; 
+			CD_AWRU_N <= 0;
 			io_state <= IO_COMM2;
 		end
 		
 		IO_COMM2: if (CE_R) begin
-			case (step)
-				2'd0: begin SCSP_IO_D <= 16'h0000;                     SCSP_IO_AD_N <= 1; SCSP_IO_DTEN_N <= 1; SCSP_IO_CS_N <= 0; SCSP_IO_WE_N <= 0; step <= 2'd1; end
-				2'd1: begin SCSP_IO_D <= ram_addr;                     SCSP_IO_AD_N <= 1; SCSP_IO_DTEN_N <= 1; SCSP_IO_CS_N <= 0; SCSP_IO_WE_N <= 0; step <= 2'd2; end
-				2'd2: begin SCSP_IO_D <= comm_data[data_pos];          SCSP_IO_AD_N <= 0; SCSP_IO_DTEN_N <= 0; SCSP_IO_CS_N <= 0; SCSP_IO_WE_N <= 0; step <= 2'd3; end
-				2'd3: if (!SCSP_IO_RDY_N) begin SCSP_IO_D <= 16'h0000; SCSP_IO_AD_N <= 1; SCSP_IO_DTEN_N <= 1; SCSP_IO_CS_N <= 1; SCSP_IO_WE_N <= 1; step <= 2'd0; end
-			endcase
-			if (step == 2'd3 && !SCSP_IO_RDY_N) begin
-				ram_addr <= ram_addr + 16'd2;
-				data_pos <= data_pos + 3'd1;
-				if (data_pos == 3'd7) io_state <= IO_END;
-				else io_state <= IO_COMM;
-			end
+			CD_ACS2_N <= 1; 
+			CD_ARD_N <= 1; 
+			CD_AWRL_N <= 1; 
+			CD_AWRU_N <= 1;
+			data_pos <= data_pos + 3'd1;
+			if (data_pos == 3'd3) io_state <= IO_IDLE;
+			else io_state <= IO_COMM;
 		end
 		
 		IO_END: begin
 			if (!cart_download) begin
 				io_state <= IO_IDLE;
-				SCSP_IO_CPURST_N <= 1;
 			end
 		end
 	endcase
@@ -773,9 +769,9 @@ reg        region_set = 0;
 
 
 //debug
-reg [15:0] comm_data[8];
-reg [15:0] comm_addr;
+reg [15:0] comm_data[4];
 reg comm_set = 0;
+reg dbg_cdd_trans_start = 0;
 
 wire       pressed = ps2_key[9];
 wire [8:0] code    = ps2_key[8:0];
@@ -785,22 +781,22 @@ always @(posedge clk_sys) begin
 	reg start = 0;
 	
 	start <= 0;
-	cdd_trans_start <= 0;
+	dbg_cdd_trans_start <= 0;
 			
 	old_state <= ps2_key[10];
 	if((ps2_key[10] != old_state) && pressed) begin
 		casex(code)
-			'h005: begin comm_n <= 2'd0; start <= 1; end 	// F1
-			'h006: begin comm_n <= 2'd1; start <= 1;  end 	// F2
-			'h004: begin  end 	// F3
-			'h00C: begin  end 	// F4
-			'h003: begin  end 	// F5
-			'h00B: begin  end 	// F6
-			'h083: begin  end 	// F7
-			'h00A: begin  end 	// F8
-			'h001: begin  end 	// F9
-			'h009: begin  end 	// F10
-			'h078: begin cdd_trans_start <= 1; end 	// F11
+			'h005: begin comm_n <= 4'd0; start <= 1; end 	// F1
+			'h006: begin comm_n <= 4'd1; start <= 1; end 	// F2
+			'h004: begin comm_n <= 4'd2; start <= 1;  end 	// F3
+			'h00C: begin comm_n <= 4'd3; start <= 1;  end 	// F4
+			'h003: begin comm_n <= 4'd4; start <= 1;  end 	// F5
+			'h00B: begin comm_n <= 4'd5; start <= 1;  end 	// F6
+			'h083: begin comm_n <= 4'd6; start <= 1;  end 	// F7
+			'h00A: begin comm_n <= 4'd7; start <= 1;  end 	// F8
+			'h001: begin comm_n <= 4'd8; start <= 1;  end 	// F9
+			'h009: begin comm_n <= 4'd9; start <= 1;  end 	// F10
+			'h078: begin dbg_cdd_trans_start <= 1; end 	// F11
 			'h177: begin  end 	// Pause
 			'h016: begin  end 	// 1
 			'h01E: begin  end 	// 2
@@ -816,9 +812,17 @@ always @(posedge clk_sys) begin
 	comm_set <= 0;
 	if (start) begin
 		case (comm_n)
-			4'd0:    begin comm_addr <= 16'h0700; comm_data <= '{16'h8500,16'h0000,16'h5000,16'h8000,16'h7942,16'h0700,16'h0000,16'h0000}; end
-			4'd1:    begin comm_addr <= 16'h0760; comm_data <= '{16'h0100,16'h0300,16'h030F,16'h0000,16'h0000,16'h0000,16'h0000,16'h0000}; end
-			default: begin comm_addr <= 16'h0700; comm_data <= '{16'h0000,16'h0000,16'h0000,16'h0000,16'h0000,16'h0000,16'h0000,16'h0000}; end
+			4'd0:    begin comm_data <= '{16'h7500,16'h0000,16'h0000,16'h0000}; end //Abort File
+			4'd1:    begin comm_data <= '{16'h0600,16'h0000,16'h0000,16'h0000}; end //End Data Transfer
+			4'd2:    begin comm_data <= '{16'h0100,16'h0000,16'h0000,16'h0000}; end //Get Hardware Info
+			4'd3:    begin comm_data <= '{16'h6700,16'h0000,16'h0000,16'h0000}; end //Get Copy Error
+			4'd4:    begin comm_data <= '{16'h48FC,16'h0000,16'h0000,16'h0000}; end //Reset Selector
+			4'd5:    begin comm_data <= '{16'hE000,16'h0001,16'h0000,16'h0000}; end //Authenticate Device
+			4'd6:    begin comm_data <= '{16'hE100,16'h0001,16'h0000,16'h0000}; end //Is Device Authenticated
+			4'd7:    begin comm_data <= '{16'h9300,16'h0000,16'h0000,16'h0000}; end //MPEG Init
+			4'd8:    begin comm_data <= '{16'hE200,16'h0000,16'h0000,16'h0002}; end //Get MPEG ROM
+			4'd9:    begin comm_data <= '{16'h5100,16'h0000,16'h0000,16'h0000}; end //Get Sector Number
+			default: begin comm_data <= '{16'h0000,16'h0000,16'h0000,16'h0000}; end //
 		endcase
 		comm_set <= 1;
 	end

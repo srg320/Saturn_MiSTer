@@ -267,6 +267,8 @@ wire        forced_scandoubler;
 wire [10:0] ps2_key;
 wire [24:0] ps2_mouse;
 
+wire [35:0] EXT_BUS;
+
 wire [21:0] gamma_bus;
 wire [15:0] sdram_sz;
 
@@ -320,8 +322,18 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 	.ps2_mouse(ps2_mouse)
 );
 
-wire code_index = &ioctl_index;
-wire cart_download = ioctl_download & ~code_index;
+reg [96:0] cd_in;
+wire [96:0] cd_out;
+hps_ext hps_ext
+(
+	.clk_sys(clk_sys),
+	.EXT_BUS(EXT_BUS),
+	.cd_in(cd_in),
+	.cd_out(cd_out)
+);
+
+wire cart_download = ioctl_download & (ioctl_index[5:0] <= 6'h01);
+wire cdd_download = ioctl_download & (ioctl_index[5:0] == 6'h02);
 
 reg osd_btn = 0;
 //always @(posedge clk_sys) begin
@@ -418,6 +430,20 @@ wire        SCSP_RAM_CS;
 wire [15:0] SCSP_RAM_Q;
 wire        SCSP_RAM_RDY;
 
+reg         CD_CDATA = 0;
+wire        CD_HDATA;
+wire        CD_COMCLK;
+reg         CD_COMREQ_N = 1;
+reg         CD_COMSYNC_N = 1;
+
+wire [18:1] CD_RAM_A;
+wire [15:0] CD_RAM_D;
+wire  [1:0] CD_RAM_WE;
+wire        CD_RAM_RD;
+wire        CD_RAM_CS;
+wire [15:0] CD_RAM_Q;
+wire        CD_RAM_RDY;
+
 wire [7:0] r, g, b;
 wire vs,hs;
 wire ce_pix;
@@ -433,12 +459,21 @@ CEGen SCSP_CEGen
 	.CE(SCSP_CE)
 );
 
+wire CD_CE;
+CEGen CD_CEGen
+(
+	.CLK(clk_sys),
+	.RST_N(~reset),
+	.IN_CLK(53693175),
+	.OUT_CLK(40000000),
+	.CE(CD_CE)
+);
+
 Saturn saturn
 (
 	.RST_N(~(reset|cart_download)),
 	.CLK(clk_sys),
 	.CE(1),
-	.SCSP_CE(SCSP_CE),
 	
 	.SRES_N(~status[0]),
 	
@@ -493,6 +528,7 @@ Saturn saturn
 	.VDP2_RB1_RD(VDP2_RB1_RD),
 	.VDP2_RB1_Q(VDP2_RB1_Q),
 	
+	.SCSP_CE(SCSP_CE),
 	.SCSP_RAM_A(SCSP_RAM_A),
 	.SCSP_RAM_D(SCSP_RAM_D),
 	.SCSP_RAM_WE(SCSP_RAM_WE),
@@ -500,6 +536,22 @@ Saturn saturn
 	.SCSP_RAM_CS(SCSP_RAM_CS),
 	.SCSP_RAM_Q(SCSP_RAM_Q),
 	.SCSP_RAM_RDY(SCSP_RAM_RDY),
+	
+	.CD_CE(CD_CE),
+	.CD_CDATA(CD_CDATA),
+	.CD_HDATA(CD_HDATA),
+	.CD_COMCLK(CD_COMCLK),
+	.CD_COMREQ_N(CD_COMREQ_N),
+	.CD_COMSYNC_N(CD_COMSYNC_N),
+	.CD_D('0),
+	.CD_CK(0),
+	.CD_RAM_A(CD_RAM_A),
+	.CD_RAM_D(CD_RAM_D),
+	.CD_RAM_WE(CD_RAM_WE),
+	.CD_RAM_RD(CD_RAM_RD),
+	.CD_RAM_CS(CD_RAM_CS),
+	.CD_RAM_Q(CD_RAM_Q),
+	.CD_RAM_RDY(CD_RAM_RDY),
 	
 	.R(r),
 	.G(g),
@@ -519,6 +571,90 @@ Saturn saturn
 	.PAUSE_EN(DBG_PAUSE_EN)
 );
 
+reg [7:0] HOST_COMM[12];
+reg [7:0] CDD_STAT[12] = '{8'h12,8'h41,8'h01,8'h01,8'h00,8'h02,8'h03,8'h04,8'h00,8'h04,8'h03,8'h9A};
+reg cdd_trans_start = 0;
+reg [3:0] cdd_trans_wait = '0;
+always @(posedge clk_sys) begin
+	reg cd_out96_last = 1;
+
+	if (cd_out[96] != cd_out96_last)  begin
+		cd_out96_last <= cd_out[96];
+		{CDD_STAT[11],CDD_STAT[10],CDD_STAT[9],CDD_STAT[8],CDD_STAT[7],CDD_STAT[6],CDD_STAT[5],CDD_STAT[4],CDD_STAT[3],CDD_STAT[2],CDD_STAT[1],CDD_STAT[0]} <= cd_out[95:0];
+		cdd_trans_start <= 1;
+		cdd_trans_wait <= '1;
+	end else if (cdd_trans_wait) begin
+		cdd_trans_wait <= cdd_trans_wait - 1;
+	end else 
+		cdd_trans_start <= 0;
+	
+	if (cdd_comm_rdy) begin
+		cd_in[95:0] <= {HOST_COMM[11],HOST_COMM[10],HOST_COMM[9],HOST_COMM[8],HOST_COMM[7],HOST_COMM[6],HOST_COMM[5],HOST_COMM[4],HOST_COMM[3],HOST_COMM[2],HOST_COMM[1],HOST_COMM[0]};
+		cd_in[96] <= ~cd_in[96];
+	end
+
+end
+		
+reg [7:0] HOST_DATA = '0;
+reg [7:0] CDD_DATA = '0;
+reg cdd_trans_next = 0;
+reg cdd_trans_done = 0;
+reg cdd_comm_rdy = 0;
+always @(posedge clk_sys) begin
+	reg [3:0] byte_cnt = '0;
+	reg [2:0] bit_cnt = '0;
+	reg COMCLK_OLD = 0;
+	
+	if (cdd_trans_start) CD_COMREQ_N <= 1;
+	if (cdd_trans_next) CD_COMREQ_N <= 0;
+	
+	COMCLK_OLD <= CD_COMCLK;
+	cdd_trans_done <= 0;
+	if (reset) begin
+		cdd_trans_done <= 0;
+		bit_cnt <= '0;
+	end else if (cdd_trans_start && !cdd_trans_wait) begin
+		cdd_trans_done <= 0;
+		bit_cnt <= '0;
+	end else if (!CD_COMCLK && COMCLK_OLD) begin
+		{CDD_DATA,CD_CDATA} <= {1'b0,CDD_DATA};
+		
+	end else if (CD_COMCLK && !COMCLK_OLD) begin
+		HOST_DATA <= {CD_HDATA,HOST_DATA[7:1]};
+		CD_COMREQ_N <= 1;
+		bit_cnt <= bit_cnt + 3'd1;
+		if (bit_cnt == 3'd7) begin
+			cdd_trans_done <= 1;
+		end
+	end
+	
+	cdd_trans_next <= 0;
+	cdd_comm_rdy <= 0;
+	if (reset) begin
+		cdd_trans_next <= 0;
+		cdd_comm_rdy <= 0;
+		byte_cnt <= '0;
+	end else if (cdd_trans_start && !cdd_trans_wait) begin
+		CDD_DATA <= CDD_STAT[0];
+		CD_COMSYNC_N <= 0;
+		byte_cnt <= 4'd0;
+		cdd_trans_next <= 1;
+	end else if (cdd_trans_done) begin
+		HOST_COMM[byte_cnt] <= HOST_DATA;
+		CD_COMSYNC_N <= 1;
+		byte_cnt <= byte_cnt + 4'd1;
+		if (byte_cnt < 4'd11) begin
+			CDD_DATA <= CDD_STAT[byte_cnt + 4'd1];
+			cdd_trans_next <= 1;
+		end else if (byte_cnt == 4'd11) begin
+			CDD_DATA <= 8'h00;
+			cdd_trans_next <= 1;
+			cdd_comm_rdy <= 1;
+		end else begin
+			
+		end
+	end
+end
 
 //always @(posedge clk_sys) begin
 //	reg old_busy;
@@ -529,7 +665,7 @@ Saturn saturn
 //end
 
 
-wire sdr_busy, sdr_busy1, sdr_busy2;
+wire sdr_busy0, sdr_busy1, sdr_busy2;
 wire [15:0] sdr_do;
 sdram sdram
 (
@@ -537,20 +673,20 @@ sdram sdram
 	.init(~locked),
 	.clk(clk_ram),
 
-	.addr0({6'b000000,SCSP_RAM_A[18:1]}), // 0000000-007FFFF
+	.addr0({6'b000000,SCSP_RAM_A[18:1]}),
 	.din0(SCSP_RAM_D),
 	.dout0(SCSP_RAM_Q),
 	.rd0(SCSP_RAM_RD & SCSP_RAM_CS),
 	.wrl0(SCSP_RAM_WE[0] & SCSP_RAM_CS),
 	.wrh0(SCSP_RAM_WE[1] & SCSP_RAM_CS),
-	.busy0(sdr_busy),
+	.busy0(sdr_busy0),
 
-	.addr1('0),
-	.din1('0),
-	.dout1(),
-	.rd1(0),
-	.wrl1(0),
-	.wrh1(0),
+	.addr1({6'b000000,CD_RAM_A[18:1]}),
+	.din1(CD_RAM_D),
+	.dout1(CD_RAM_Q),
+	.rd1(CD_RAM_RD & CD_RAM_CS),
+	.wrl1(CD_RAM_WE[0] & CD_RAM_CS),
+	.wrh1(CD_RAM_WE[1] & CD_RAM_CS),
 	.busy1(sdr_busy1),
 
 	.addr2('0),
@@ -561,7 +697,8 @@ sdram sdram
 	.wrh2(0),
 	.busy2(sdr_busy2)
 );
-assign SCSP_RAM_RDY = ~sdr_busy;
+assign SCSP_RAM_RDY = ~sdr_busy0;
+assign CD_RAM_RDY = ~sdr_busy1;
 
 always @(posedge clk_sys) begin
 	reg old_busy;
@@ -592,7 +729,7 @@ ddram ddram
 assign MEM_DI     = ddr_do;
 assign MEM_WAIT_N = ~ddr_busy;
 
-vdp1_fb vdp1_fb0
+spiram #(17,16) vdp1_fb0
 (
 	.clock(clk_sys),
 	.address({VDP1_FB0_A[9:1],VDP1_FB0_A[17:10]}),
@@ -601,7 +738,7 @@ vdp1_fb vdp1_fb0
 	.q(VDP1_FB0_Q)
 );
 
-vdp1_fb vdp1_fb1
+spiram #(17,16) vdp1_fb1
 (
 	.clock(clk_sys),
 	.address({VDP1_FB1_A[9:1],VDP1_FB1_A[17:10]}),
