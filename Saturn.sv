@@ -201,6 +201,7 @@ assign LED_USER  = cart_download;
 localparam CONF_STR = {
 	"Saturn;;",
 	"FS,BIN;",
+	"S0,CUE,Insert Disk;",
 	"-;",
 	"oG,Time set,No,Yes;",
 	"-;",
@@ -319,7 +320,10 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 	.sdram_sz(sdram_sz),
 
 	.ps2_key(ps2_key),
-	.ps2_mouse(ps2_mouse)
+	.ps2_mouse(ps2_mouse),
+
+	.EXT_BUS(EXT_BUS)
+
 );
 
 reg [96:0] cd_in;
@@ -543,8 +547,8 @@ Saturn saturn
 	.CD_COMCLK(CD_COMCLK),
 	.CD_COMREQ_N(CD_COMREQ_N),
 	.CD_COMSYNC_N(CD_COMSYNC_N),
-	.CD_D('0),
-	.CD_CK(0),
+	.CD_D(cdc_d),
+	.CD_CK(cdc_wr),
 	.CD_RAM_A(CD_RAM_A),
 	.CD_RAM_D(CD_RAM_D),
 	.CD_RAM_WE(CD_RAM_WE),
@@ -584,7 +588,7 @@ always @(posedge clk_sys) begin
 		cdd_trans_start <= 1;
 		cdd_trans_wait <= '1;
 	end else if (cdd_trans_wait) begin
-		cdd_trans_wait <= cdd_trans_wait - 1;
+		cdd_trans_wait <= cdd_trans_wait - 4'd1;
 	end else 
 		cdd_trans_start <= 0;
 	
@@ -604,6 +608,7 @@ always @(posedge clk_sys) begin
 	reg [3:0] byte_cnt = '0;
 	reg [2:0] bit_cnt = '0;
 	reg COMCLK_OLD = 0;
+	reg [9:0] cdd_next_delay = '0;
 	
 	if (cdd_trans_start) CD_COMREQ_N <= 1;
 	if (cdd_trans_next) CD_COMREQ_N <= 0;
@@ -618,7 +623,6 @@ always @(posedge clk_sys) begin
 		bit_cnt <= '0;
 	end else if (!CD_COMCLK && COMCLK_OLD) begin
 		{CDD_DATA,CD_CDATA} <= {1'b0,CDD_DATA};
-		
 	end else if (CD_COMCLK && !COMCLK_OLD) begin
 		HOST_DATA <= {CD_HDATA,HOST_DATA[7:1]};
 		CD_COMREQ_N <= 1;
@@ -645,16 +649,40 @@ always @(posedge clk_sys) begin
 		byte_cnt <= byte_cnt + 4'd1;
 		if (byte_cnt < 4'd11) begin
 			CDD_DATA <= CDD_STAT[byte_cnt + 4'd1];
-			cdd_trans_next <= 1;
+//			cdd_trans_next <= 1;
+			cdd_next_delay <= 10'h3FF;
 		end else if (byte_cnt == 4'd11) begin
 			CDD_DATA <= 8'h00;
-			cdd_trans_next <= 1;
+//			cdd_trans_next <= 1;
+			cdd_next_delay <= 10'h3FF;
 			cdd_comm_rdy <= 1;
-		end else begin
-			
 		end
 	end
+	
+	if (cdd_next_delay) begin
+		cdd_next_delay <= cdd_next_delay - 1;
+		cdd_trans_next <= (cdd_next_delay == 10'h001);
+	end
 end
+
+reg  cdc_wr;
+reg [15:0] cdc_d;
+always @(posedge clk_sys) begin
+	reg [2:0] cnt = 0;
+
+	if (cdd_download && ioctl_wr) begin
+		cnt <= 7;
+		cdc_wr <= 1;
+		cdc_d <= {ioctl_data[7:0],ioctl_data[15:8]};
+	end
+	else if (cnt) begin
+		cnt <= cnt - 1'd1;
+	end
+	else begin
+		cdc_wr <= 0;
+	end
+end
+
 
 //always @(posedge clk_sys) begin
 //	reg old_busy;
@@ -681,7 +709,7 @@ sdram sdram
 	.wrh0(SCSP_RAM_WE[1] & SCSP_RAM_CS),
 	.busy0(sdr_busy0),
 
-	.addr1({6'b000000,CD_RAM_A[18:1]}),
+	.addr1({6'b000001,CD_RAM_A[18:1]}),
 	.din1(CD_RAM_D),
 	.dout1(CD_RAM_Q),
 	.rd1(CD_RAM_RD & CD_RAM_CS),
@@ -729,7 +757,8 @@ ddram ddram
 assign MEM_DI     = ddr_do;
 assign MEM_WAIT_N = ~ddr_busy;
 
-spiram #(17,16) vdp1_fb0
+vdp1_fb vdp1_fb0
+//spiram #(17,16) vdp1_fb0
 (
 	.clock(clk_sys),
 	.address({VDP1_FB0_A[9:1],VDP1_FB0_A[17:10]}),
@@ -738,7 +767,8 @@ spiram #(17,16) vdp1_fb0
 	.q(VDP1_FB0_Q)
 );
 
-spiram #(17,16) vdp1_fb1
+vdp1_fb vdp1_fb1
+//spiram #(17,16) vdp1_fb1
 (
 	.clock(clk_sys),
 	.address({VDP1_FB1_A[9:1],VDP1_FB1_A[17:10]}),

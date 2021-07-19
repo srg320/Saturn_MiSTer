@@ -114,9 +114,9 @@ always @(posedge clk) begin
 
 	if(rfs_timer) rfs_timer <= rfs_timer - 1'd1;
 	
-	if ((~old_rd[0] && rd[0]) || (~old_wr[0] && wr[0])) begin ram_req[0] <= 1; ram_pend[0] <= 1; end
-	else if ((~old_rd[1] && rd[1]) || (~old_wr[1] && wr[1])) begin ram_req[1] <= 1; ram_pend[1] <= 1; end
-	else if ((~old_rd[2] && rd[2]) || (~old_wr[2] && wr[2])) begin ram_req[2] <= 1; ram_pend[2] <= 1; end
+	if ((~old_rd[0] && rd[0]) || (~old_wr[0] && wr[0])) begin  ram_pend[0] <= 1; end
+	if ((~old_rd[1] && rd[1]) || (~old_wr[1] && wr[1])) begin  ram_pend[1] <= 1; end
+	if ((~old_rd[2] && rd[2]) || (~old_wr[2] && wr[2])) begin  ram_pend[2] <= 1; end
 	
 	if(state == STATE_IDLE && mode == MODE_NORMAL) begin
 		if (!rfs_timer) begin
@@ -136,6 +136,7 @@ always @(posedge clk) begin
 			active <= 1;
 			state <= STATE_START;
 			ram_pend[0] <= 0;
+			ram_req[0] <= 1;
 		end
 		else if ((~old_rd[1] && rd[1]) || (~old_wr[1] && wr[1]) || ram_pend[1]) begin
 			old_rd[1] <= rd[1];
@@ -147,6 +148,7 @@ always @(posedge clk) begin
 			active <= 1;
 			state <= STATE_START;
 			ram_pend[1] <= 0;
+			ram_req[1] <= 1;
 		end
 		else if ((~old_rd[2] && rd[2]) || (~old_wr[2] && wr[2]) || ram_pend[2]) begin
 			old_rd[2] <= rd[2];
@@ -158,6 +160,7 @@ always @(posedge clk) begin
 			active <= 1;
 			state <= STATE_START;
 			ram_pend[2] <= 0;
+			ram_req[2] <= 1;
 		end
 	end
 
@@ -180,9 +183,9 @@ always @(posedge clk) begin
 	end
 end
 
-assign busy0 = ram_req[0];
-assign busy1 = ram_req[1];
-assign busy2 = ram_req[2];
+assign busy0 = ram_req[0]|ram_pend[0];
+assign busy1 = ram_req[1]|ram_pend[1];
+assign busy2 = ram_req[2]|ram_pend[2];
 
 
 localparam MODE_NORMAL = 2'b00;

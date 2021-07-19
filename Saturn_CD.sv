@@ -394,7 +394,7 @@ always @(posedge clk_sys) begin
 	end
 end
 
-CD #("sh7034.mif") cd
+CD #("cdb105.mif") cd
 (
 	.CLK(clk_sys),
 	.RST_N(~reset),
@@ -786,16 +786,16 @@ always @(posedge clk_sys) begin
 	old_state <= ps2_key[10];
 	if((ps2_key[10] != old_state) && pressed) begin
 		casex(code)
-			'h005: begin comm_n <= 4'd0; start <= 1; end 	// F1
-			'h006: begin comm_n <= 4'd1; start <= 1; end 	// F2
-			'h004: begin comm_n <= 4'd2; start <= 1;  end 	// F3
-			'h00C: begin comm_n <= 4'd3; start <= 1;  end 	// F4
-			'h003: begin comm_n <= 4'd4; start <= 1;  end 	// F5
-			'h00B: begin comm_n <= 4'd5; start <= 1;  end 	// F6
-			'h083: begin comm_n <= 4'd6; start <= 1;  end 	// F7
-			'h00A: begin comm_n <= 4'd7; start <= 1;  end 	// F8
-			'h001: begin comm_n <= 4'd8; start <= 1;  end 	// F9
-			'h009: begin comm_n <= 4'd9; start <= 1;  end 	// F10
+			'h005: begin comm_n <= 4'd1; start <= 1; end 	// F1
+			'h006: begin comm_n <= 4'd2; start <= 1; end 	// F2
+			'h004: begin comm_n <= 4'd3; start <= 1;  end 	// F3
+			'h00C: begin comm_n <= 4'd4; start <= 1;  end 	// F4
+			'h003: begin comm_n <= 4'd5; start <= 1;  end 	// F5
+			'h00B: begin comm_n <= 4'd6; start <= 1;  end 	// F6
+			'h083: begin comm_n <= 4'd7; start <= 1;  end 	// F7
+			'h00A: begin comm_n <= 4'd8; start <= 1;  end 	// F8
+			'h001: begin comm_n <= 4'd9; start <= 1;  end 	// F9
+			'h009: begin comm_n <= 4'd10; start <= 1;  end 	// F10
 			'h078: begin dbg_cdd_trans_start <= 1; end 	// F11
 			'h177: begin  end 	// Pause
 			'h016: begin  end 	// 1
@@ -812,16 +812,21 @@ always @(posedge clk_sys) begin
 	comm_set <= 0;
 	if (start) begin
 		case (comm_n)
-			4'd0:    begin comm_data <= '{16'h7500,16'h0000,16'h0000,16'h0000}; end //Abort File
-			4'd1:    begin comm_data <= '{16'h0600,16'h0000,16'h0000,16'h0000}; end //End Data Transfer
-			4'd2:    begin comm_data <= '{16'h0100,16'h0000,16'h0000,16'h0000}; end //Get Hardware Info
-			4'd3:    begin comm_data <= '{16'h6700,16'h0000,16'h0000,16'h0000}; end //Get Copy Error
-			4'd4:    begin comm_data <= '{16'h48FC,16'h0000,16'h0000,16'h0000}; end //Reset Selector
-			4'd5:    begin comm_data <= '{16'hE000,16'h0001,16'h0000,16'h0000}; end //Authenticate Device
-			4'd6:    begin comm_data <= '{16'hE100,16'h0001,16'h0000,16'h0000}; end //Is Device Authenticated
-			4'd7:    begin comm_data <= '{16'h9300,16'h0000,16'h0000,16'h0000}; end //MPEG Init
-			4'd8:    begin comm_data <= '{16'hE200,16'h0000,16'h0000,16'h0002}; end //Get MPEG ROM
-			4'd9:    begin comm_data <= '{16'h5100,16'h0000,16'h0000,16'h0000}; end //Get Sector Number
+			4'd1:    begin comm_data <= '{16'h7500,16'h0000,16'h0000,16'h0000}; end //Abort File
+			4'd2:    begin comm_data <= '{16'h0600,16'h0000,16'h0000,16'h0000}; end //End Data Transfer
+			4'd3:    begin comm_data <= '{16'h0100,16'h0000,16'h0000,16'h0000}; end //Get Hardware Info
+			4'd4:    begin comm_data <= '{16'h6700,16'h0000,16'h0000,16'h0000}; end //Get Copy Error
+			4'd5:    begin comm_data <= '{16'h48FC,16'h0000,16'h0000,16'h0000}; end //Reset Selector
+			4'd6:    begin comm_data <= '{16'hE000,16'h0001,16'h0000,16'h0000}; end //Authenticate Device
+			4'd7:    begin comm_data <= '{16'hE100,16'h0001,16'h0000,16'h0000}; end //Is Device Authenticated
+			
+			4'd8:    begin comm_data <= '{16'h0401,16'h0000,16'h0000,16'h0000}; end //Initialize CD System
+			4'd9:    begin comm_data <= '{16'h0000,16'h0000,16'h0000,16'h0000}; end //Get Status
+			4'd10:   begin comm_data <= '{16'h0200,16'h0000,16'h0000,16'h0000}; end //Get TOC
+			
+//			4'd7:    begin comm_data <= '{16'h9300,16'h0000,16'h0000,16'h0000}; end //MPEG Init
+//			4'd8:    begin comm_data <= '{16'hE200,16'h0000,16'h0000,16'h0002}; end //Get MPEG ROM
+//			4'd9:    begin comm_data <= '{16'h5100,16'h0000,16'h0000,16'h0000}; end //Get Sector Number
 			default: begin comm_data <= '{16'h0000,16'h0000,16'h0000,16'h0000}; end //
 		endcase
 		comm_set <= 1;

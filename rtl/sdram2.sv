@@ -259,10 +259,14 @@ module sdram2
 		
 		if (data0_read || data1_read) temp <= SDRAM_DQ;
 
-		if (out0_read && !out0_chip) dout[{1'b0,out0_bank}][31:16] <= temp;
-		if (out1_read && !out1_chip) dout[{1'b0,out1_bank}][15:0] <= temp;
-		if (out0_read && out0_chip) dout[4][31:16] <= temp;
-		if (out1_read && out1_chip) dout[4][15:0] <= temp;
+		if (init) 
+			dout <= '{5{'0}};
+		else begin
+			if (out0_read && !out0_chip) dout[{1'b0,out0_bank}][31:16] <= temp;
+			if (out1_read && !out1_chip) dout[{1'b0,out1_bank}][15:0] <= temp;
+			if (out0_read && out0_chip) dout[4][31:16] <= temp;
+			if (out1_read && out1_chip) dout[4][15:0] <= temp;
+		end
 	end
 		
 	assign {dout_a0,dout_a1,dout_b0,dout_b1,ch2dout} = {dout[0],dout[1],dout[2],dout[3],dout[4]};
