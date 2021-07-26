@@ -46,13 +46,19 @@ module ddram
 
 
 
-reg [27:1] raddr;
-reg  [7:0] ram_burst;
-reg [63:0] ram_q, next_q;
-reg [63:0] ram_data;
-reg [27:1] ram_address, cache_addr;
-reg        ram_read = 0;
-reg        ram_write = 0;
+reg   [7:0] ram_burst;
+reg [127:0] ram_q;
+reg  [63:0] ram_data;
+reg  [27:1] ram_address, cache_addr;
+reg   [7:0] ram_ba;
+reg         ram_word;
+reg         ram_read = 0;
+reg         ram_write = 0;
+
+reg  [27:1] addr;
+reg  [31:0] din;
+reg   [3:0] wr;
+reg         word;
 
 reg [1:0]  state = 0;
 reg        read_busy = 0;
@@ -65,7 +71,10 @@ always @(posedge clk) begin
 	old_we <= |mem_wr;
 	if (~old_rd & mem_rd) read_busy <= 1;
 	if (~old_we & |mem_wr) write_busy <= 1;
-	raddr <= mem_addr;
+	addr <= mem_addr;
+	din <= mem_din;
+	wr <= mem_wr;
+	word <= mem_16b;
 
 	if(!DDRAM_BUSY) begin
 		ram_write <= 0;
@@ -73,27 +82,32 @@ always @(posedge clk) begin
 
 		case(state)
 			0: if (write_busy) begin
-					ram_data		<= mem_16b ? {4{mem_din[15:0]}} : {2{mem_din}};
-					ram_address <= mem_addr;
+					ram_data		<= word ? {4{din[15:0]}} : {2{din}};
+					ram_address <= addr;
+					if (word) 
+						case (addr[2:1])
+							2'b00: ram_ba <= {wr[1:0],6'b000000};
+							2'b01: ram_ba <= {2'b00,wr[1:0],4'b0000};
+							2'b10: ram_ba <= {4'b0000,wr[1:0],2'b00};
+							2'b11: ram_ba <= {6'b000000,wr[1:0]};
+						endcase
+					else
+						ram_ba <= !addr[2] ? {wr,4'b0000} : {4'b0000,wr};
 					ram_write 	<= 1;
 					ram_burst   <= 1;
 					state       <= 1;
 				end
 				else if(read_busy) begin
-					if (cache_addr[27:3] == raddr[27:3]) read_busy <= 0;
-					else if ((cache_addr[27:3]+1'd1) == raddr[27:3]) begin
-						read_busy    <= 0;
-						ram_q       <= next_q;
-						cache_addr  <= {raddr[27:3],2'b00};
-						ram_address <= {raddr[27:3]+1'd1,2'b00};
-						ram_read    <= 1;
-						ram_burst   <= 1;
-						state       <= 3;
+					if (cache_addr[27:4] == addr[27:4]) begin
+						cache_addr  <= addr;
+						read_busy <= 0;
 					end
 					else begin
-						ram_address <= {raddr[27:3],2'b00};
-						cache_addr  <= {raddr[27:3],2'b00};
+						ram_address <= {addr[27:4],3'b000};
+						cache_addr  <= addr;
+						ram_ba      <= 8'hFF;
 						ram_read    <= 1;
+						ram_word 	<= word;
 						ram_burst   <= 2;
 						state       <= 2;
 					end 
@@ -101,19 +115,19 @@ always @(posedge clk) begin
 
 			1: begin
 					cache_addr <= '1;
-					cache_addr[3:2] <= '0;
+					cache_addr[3:1] <= '0;
 					write_busy <= 0;
 					state  <= 0;
 				end
 		
 			2: if (DDRAM_DOUT_READY) begin
-					ram_q  <= DDRAM_DOUT;
-					read_busy <= 0;
+					ram_q[127:64]  <= DDRAM_DOUT;
 					state  <= 3;
 				end
 
 			3: if (DDRAM_DOUT_READY) begin
-					next_q <= DDRAM_DOUT;
+					ram_q[63:0] <= DDRAM_DOUT;
+					read_busy <= 0;
 					state  <= 0;
 				end
 		endcase
@@ -121,35 +135,31 @@ always @(posedge clk) begin
 end
 
 always_comb begin
-	if (mem_16b) 
-		case (raddr[2:1])
-			2'b00: mem_dout = {16'h0000,ram_q[63:48]};
-			2'b01: mem_dout = {16'h0000,ram_q[47:32]};
-			2'b10: mem_dout = {16'h0000,ram_q[31:16]};
-			2'b11: mem_dout = {16'h0000,ram_q[15:0]};
+	if (ram_word) 
+		case (cache_addr[3:1])
+			3'b000: mem_dout = {16'h0000,ram_q[127:112]};
+			3'b001: mem_dout = {16'h0000,ram_q[111:096]};
+			3'b010: mem_dout = {16'h0000,ram_q[095:080]};
+			3'b011: mem_dout = {16'h0000,ram_q[079:064]};
+			3'b100: mem_dout = {16'h0000,ram_q[063:048]};
+			3'b101: mem_dout = {16'h0000,ram_q[047:032]};
+			3'b110: mem_dout = {16'h0000,ram_q[031:016]};
+			3'b111: mem_dout = {16'h0000,ram_q[015:000]};
 		endcase
 	else
-		mem_dout = !raddr[2] ? ram_q[63:32] : ram_q[31:0];
+		case (cache_addr[3:2])
+			2'b00: mem_dout = ram_q[127:096];
+			2'b01: mem_dout = ram_q[095:064];
+			2'b10: mem_dout = ram_q[063:032];
+			2'b11: mem_dout = ram_q[031:000];
+		endcase
 end
 assign mem_busy = read_busy | write_busy;
 
 
-reg [7:0] ram_ba;
-always_comb begin
-	if (mem_16b) 
-		case (ram_address[2:1])
-			2'b00: ram_ba = {mem_wr[1:0],6'b000000};
-			2'b01: ram_ba = {2'b00,mem_wr[1:0],4'b0000};
-			2'b10: ram_ba = {4'b0000,mem_wr[1:0],2'b00};
-			2'b11: ram_ba = {6'b00,mem_wr[1:0]};
-		endcase
-	else
-		ram_ba = !ram_address[2] ? {mem_wr,4'b0000} : {4'b0000,mem_wr};
-end
-
 assign DDRAM_CLK      = clk;
 assign DDRAM_BURSTCNT = ram_burst;
-assign DDRAM_BE       = ram_read ? 8'hFF : ram_ba;
+assign DDRAM_BE       = ram_ba;
 assign DDRAM_ADDR     = {4'b0011, ram_address[27:3]}; // RAM at 0x30000000
 assign DDRAM_RD       = ram_read;
 assign DDRAM_DIN      = ram_data;

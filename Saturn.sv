@@ -1,10 +1,4 @@
 //============================================================================
-//  FPGAGen port to MiSTer
-//  Copyright (c) 2017-2019 Sorgelig
-//
-//  YM2612 implementation by Jose Tejada Gomez. Twitter: @topapate
-//  Original Genesis code: Copyright (c) 2010-2013 Gregory Estrade (greg@torlus.com) 
-//
 //  This program is free software; you can redistribute it and/or modify it
 //  under the terms of the GNU General Public License as published by the Free
 //  Software Foundation; either version 2 of the License, or (at your option)
@@ -204,6 +198,7 @@ localparam CONF_STR = {
 	"S0,CUE,Insert Disk;",
 	"-;",
 	"oG,Time set,No,Yes;",
+//	"oHI,Region,No,Yes;",
 	"-;",
 	"P1,Audio & Video;",
 	"P1-;",
@@ -381,6 +376,7 @@ wire [24:0] MEM_A;
 wire [31:0] MEM_DI;
 wire [31:0] MEM_DO;
 wire        ROM_CS_N;
+wire        SRAM_CS_N;
 wire        RAML_CS_N;
 wire        RAMH_CS_N;
 wire  [3:0] MEM_DQM_N;
@@ -488,6 +484,7 @@ Saturn saturn
 	.MEM_DO(MEM_DO),
 	.MEM_DQM_N(MEM_DQM_N),
 	.ROM_CS_N(ROM_CS_N),
+	.SRAM_CS_N(SRAM_CS_N),
 	.RAML_CS_N(RAML_CS_N),
 	.RAMH_CS_N(RAMH_CS_N),
 	.MEM_RD_N(MEM_RD_N),
@@ -660,7 +657,7 @@ always @(posedge clk_sys) begin
 	end
 	
 	if (cdd_next_delay) begin
-		cdd_next_delay <= cdd_next_delay - 1;
+		cdd_next_delay <= cdd_next_delay - 10'h001;
 		cdd_trans_next <= (cdd_next_delay == 10'h001);
 	end
 end
@@ -737,7 +734,8 @@ always @(posedge clk_sys) begin
 end
 
 wire [27:1] ddr_addr = !ROM_CS_N  ? {9'b000000000,MEM_A[18:1]} :
-                       !RAML_CS_N ? {8'b00000001, MEM_A[19:1]} :
+                       !SRAM_CS_N ? {9'b000000001,MEM_A[18:1]} :
+							  !RAML_CS_N ? {8'b00000001, MEM_A[19:1]} :
 							               {8'b00000010, MEM_A[19:2],1'b0};
 wire [31:0] ddr_do;
 wire        ddr_busy;
@@ -749,9 +747,9 @@ ddram ddram
 	.mem_addr(cart_download ? {3'b000,ioctl_addr[24:1]} : ddr_addr),
 	.mem_dout(ddr_do),
 	.mem_din(cart_download ? {ioctl_data[7:0],ioctl_data[15:8]} : MEM_DO),
-	.mem_rd(cart_download ? 1'b0 : (~RAMH_CS_N | ~RAML_CS_N | ~ROM_CS_N) & ~MEM_RD_N),
-	.mem_wr(cart_download ? {2'b00,{2{ioctl_wait}}} : {4{~RAMH_CS_N | ~RAML_CS_N | ~ROM_CS_N}} & ~MEM_DQM_N),
-	.mem_16b(cart_download | ~RAML_CS_N | ~ROM_CS_N),
+	.mem_rd(cart_download ? 1'b0 : (~RAMH_CS_N | ~RAML_CS_N | ~ROM_CS_N | ~SRAM_CS_N) & ~MEM_RD_N),
+	.mem_wr(cart_download ? {2'b00,{2{ioctl_wait}}} : {4{~RAMH_CS_N | ~RAML_CS_N | ~SRAM_CS_N}} & ~MEM_DQM_N),
+	.mem_16b(cart_download | RAMH_CS_N),
 	.mem_busy(ddr_busy)
 );
 assign MEM_DI     = ddr_do;
