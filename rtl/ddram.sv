@@ -40,6 +40,7 @@ module ddram
 	input  [31:0] mem_din,
 	input         mem_rd,
 	input   [3:0] mem_wr,
+	input   [1:0] mem_chan,
 	input         mem_16b,
 	output        mem_busy
 );
@@ -47,9 +48,11 @@ module ddram
 
 
 reg   [7:0] ram_burst;
-reg [127:0] ram_q;
-reg  [63:0] ram_data;
-reg  [27:1] ram_address, cache_addr;
+reg  [63:0] ram_din;
+reg  [27:1] ram_address;
+(* ramstyle = "logic" *) reg  [27:1] cache_addr[4];
+(* ramstyle = "logic" *) reg [127:0] cache_data[4];
+reg   [1:0] cache_chan;
 reg   [7:0] ram_ba;
 reg         ram_word;
 reg         ram_read = 0;
@@ -58,6 +61,7 @@ reg         ram_write = 0;
 reg  [27:1] addr;
 reg  [31:0] din;
 reg   [3:0] wr;
+reg   [1:0] chan;
 reg         word;
 
 reg [1:0]  state = 0;
@@ -74,6 +78,7 @@ always @(posedge clk) begin
 	addr <= mem_addr;
 	din <= mem_din;
 	wr <= mem_wr;
+	chan <= mem_chan;
 	word <= mem_16b;
 
 	if(!DDRAM_BUSY) begin
@@ -82,7 +87,29 @@ always @(posedge clk) begin
 
 		case(state)
 			0: if (write_busy) begin
-					ram_data		<= word ? {4{din[15:0]}} : {2{din}};
+					if (cache_addr[chan][27:4] == addr[27:4]) begin
+						if (word) 
+							case (addr[3:1])
+								3'b000: cache_data[chan][127:112] <= din[15:0];
+								3'b001: cache_data[chan][111:096] <= din[15:0];
+								3'b010: cache_data[chan][095:080] <= din[15:0];
+								3'b011: cache_data[chan][079:064] <= din[15:0];
+								3'b100: cache_data[chan][063:048] <= din[15:0];
+								3'b101: cache_data[chan][047:032] <= din[15:0];
+								3'b110: cache_data[chan][031:016] <= din[15:0];
+								3'b111: cache_data[chan][015:000] <= din[15:0];
+							endcase
+						else
+							case (addr[3:2])
+								2'b00: cache_data[chan][127:096] <= din;
+								2'b01: cache_data[chan][095:064] <= din;
+								2'b10: cache_data[chan][063:032] <= din;
+								2'b11: cache_data[chan][031:000] <= din;
+							endcase
+//					end else begin
+//						cache_addr[chan] <= '1;
+					end
+					ram_din		<= word ? {4{din[15:0]}} : {2{din}};
 					ram_address <= addr;
 					if (word) 
 						case (addr[2:1])
@@ -98,37 +125,38 @@ always @(posedge clk) begin
 					state       <= 1;
 				end
 				else if(read_busy) begin
-					if (cache_addr[27:4] == addr[27:4]) begin
-						cache_addr  <= addr;
+					if (cache_addr[chan][27:4] == addr[27:4]) begin
+						cache_addr[chan] <= addr;
+						cache_chan <= chan;
+						ram_word <= word;
 						read_busy <= 0;
 					end
 					else begin
 						ram_address <= {addr[27:4],3'b000};
-						cache_addr  <= addr;
+						cache_addr[chan] <= addr;
+						cache_chan <= chan;
+						ram_word 	<= word;
 						ram_ba      <= 8'hFF;
 						ram_read    <= 1;
-						ram_word 	<= word;
 						ram_burst   <= 2;
 						state       <= 2;
 					end 
 				end
 
 			1: begin
-					cache_addr <= '1;
-					cache_addr[3:1] <= '0;
 					write_busy <= 0;
 					state  <= 0;
 				end
 		
 			2: if (DDRAM_DOUT_READY) begin
-					ram_q[127:64]  <= DDRAM_DOUT;
-					state  <= 3;
+					cache_data[cache_chan][127:64] <= DDRAM_DOUT;
+					state <= 3;
 				end
 
 			3: if (DDRAM_DOUT_READY) begin
-					ram_q[63:0] <= DDRAM_DOUT;
+					cache_data[cache_chan][63:0] <= DDRAM_DOUT;
 					read_busy <= 0;
-					state  <= 0;
+					state <= 0;
 				end
 		endcase
 	end
@@ -136,22 +164,22 @@ end
 
 always_comb begin
 	if (ram_word) 
-		case (cache_addr[3:1])
-			3'b000: mem_dout = {16'h0000,ram_q[127:112]};
-			3'b001: mem_dout = {16'h0000,ram_q[111:096]};
-			3'b010: mem_dout = {16'h0000,ram_q[095:080]};
-			3'b011: mem_dout = {16'h0000,ram_q[079:064]};
-			3'b100: mem_dout = {16'h0000,ram_q[063:048]};
-			3'b101: mem_dout = {16'h0000,ram_q[047:032]};
-			3'b110: mem_dout = {16'h0000,ram_q[031:016]};
-			3'b111: mem_dout = {16'h0000,ram_q[015:000]};
+		case (cache_addr[cache_chan][3:1])
+			3'b000: mem_dout = {16'h0000,cache_data[cache_chan][127:112]};
+			3'b001: mem_dout = {16'h0000,cache_data[cache_chan][111:096]};
+			3'b010: mem_dout = {16'h0000,cache_data[cache_chan][095:080]};
+			3'b011: mem_dout = {16'h0000,cache_data[cache_chan][079:064]};
+			3'b100: mem_dout = {16'h0000,cache_data[cache_chan][063:048]};
+			3'b101: mem_dout = {16'h0000,cache_data[cache_chan][047:032]};
+			3'b110: mem_dout = {16'h0000,cache_data[cache_chan][031:016]};
+			3'b111: mem_dout = {16'h0000,cache_data[cache_chan][015:000]};
 		endcase
 	else
-		case (cache_addr[3:2])
-			2'b00: mem_dout = ram_q[127:096];
-			2'b01: mem_dout = ram_q[095:064];
-			2'b10: mem_dout = ram_q[063:032];
-			2'b11: mem_dout = ram_q[031:000];
+		case (cache_addr[cache_chan][3:2])
+			2'b00: mem_dout = cache_data[cache_chan][127:096];
+			2'b01: mem_dout = cache_data[cache_chan][095:064];
+			2'b10: mem_dout = cache_data[cache_chan][063:032];
+			2'b11: mem_dout = cache_data[cache_chan][031:000];
 		endcase
 end
 assign mem_busy = read_busy | write_busy;
@@ -162,7 +190,7 @@ assign DDRAM_BURSTCNT = ram_burst;
 assign DDRAM_BE       = ram_ba;
 assign DDRAM_ADDR     = {4'b0011, ram_address[27:3]}; // RAM at 0x30000000
 assign DDRAM_RD       = ram_read;
-assign DDRAM_DIN      = ram_data;
+assign DDRAM_DIN      = ram_din;
 assign DDRAM_WE       = ram_write;
 
 endmodule

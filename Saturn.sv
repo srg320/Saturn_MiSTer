@@ -198,7 +198,7 @@ localparam CONF_STR = {
 	"S0,CUE,Insert Disk;",
 	"-;",
 	"oG,Time set,No,Yes;",
-//	"oHI,Region,No,Yes;",
+	"oHJ,Region,Japan,Taiwan,USA,Brazil,Korea,Asia,Europe;",
 	"-;",
 	"P1,Audio & Video;",
 	"P1-;",
@@ -332,7 +332,7 @@ hps_ext hps_ext
 );
 
 wire cart_download = ioctl_download & (ioctl_index[5:0] <= 6'h01);
-wire cdd_download = ioctl_download & (ioctl_index[5:0] == 6'h02);
+wire cdd_download = ioctl_download & (ioctl_index[5:1] == 6'h02>>1);
 
 reg osd_btn = 0;
 //always @(posedge clk_sys) begin
@@ -368,6 +368,14 @@ pll pll
 
 wire reset = RESET | status[0] | buttons[1];
 
+wire  [3:0] area_code = status[51:49] == 3'd0 ? 4'h1 :	//Japan area
+                        status[51:49] == 3'd1 ? 4'h2 :	//Asia NTSC area
+								status[51:49] == 3'd2 ? 4'h4 :	//North America area
+								status[51:49] == 3'd3 ? 4'h5 :	//Central/S. America NTSC area
+								status[51:49] == 3'd4 ? 4'h6 :	//Korea area
+								status[51:49] == 3'd5 ? 4'hA :	//Asia PAL area
+								status[51:49] == 3'd6 ? 4'hC :	//Europe PAL area
+								                        4'h3;		//Reserved
 wire [15:0] joy1 = {~joystick_0[0],~joystick_0[1],~joystick_0[2],~joystick_0[3],~joystick_0[7],~joystick_0[4],~joystick_0[6],~joystick_0[5],
                     ~joystick_0[8],~joystick_0[9],~joystick_0[10],~joystick_0[11],~joystick_0[12],3'b111};
 
@@ -478,6 +486,7 @@ Saturn saturn
 	.SRES_N(~status[0]),
 	
 	.TIME_SET(~status[48]),
+	.AREA(area_code),
 	
 	.MEM_A(MEM_A),
 	.MEM_DI(MEM_DI),
@@ -546,6 +555,7 @@ Saturn saturn
 	.CD_COMSYNC_N(CD_COMSYNC_N),
 	.CD_D(cdc_d),
 	.CD_CK(cdc_wr),
+	.CD_SPD(cdc_speed),
 	.CD_RAM_A(CD_RAM_A),
 	.CD_RAM_D(CD_RAM_D),
 	.CD_RAM_WE(CD_RAM_WE),
@@ -662,8 +672,10 @@ always @(posedge clk_sys) begin
 	end
 end
 
-reg  cdc_wr;
+
 reg [15:0] cdc_d;
+reg        cdc_wr;
+reg        cdc_speed;
 always @(posedge clk_sys) begin
 	reg [2:0] cnt = 0;
 
@@ -671,6 +683,7 @@ always @(posedge clk_sys) begin
 		cnt <= 7;
 		cdc_wr <= 1;
 		cdc_d <= {ioctl_data[7:0],ioctl_data[15:8]};
+		cdc_speed <= ioctl_index[0];
 	end
 	else if (cnt) begin
 		cnt <= cnt - 1'd1;
@@ -733,6 +746,10 @@ always @(posedge clk_sys) begin
 	if(old_busy & ~ddr_busy) ioctl_wait <= 0;
 end
 
+wire [1:0] ddr_chan = !ROM_CS_N  ? 2'd0 :
+                      !SRAM_CS_N ? 2'd1 :
+							 !RAML_CS_N ? 2'd2 :
+							 2'd3;
 wire [27:1] ddr_addr = !ROM_CS_N  ? {9'b000000000,MEM_A[18:1]} :
                        !SRAM_CS_N ? {9'b000000001,MEM_A[18:1]} :
 							  !RAML_CS_N ? {8'b00000001, MEM_A[19:1]} :
@@ -749,6 +766,7 @@ ddram ddram
 	.mem_din(cart_download ? {ioctl_data[7:0],ioctl_data[15:8]} : MEM_DO),
 	.mem_rd(cart_download ? 1'b0 : (~RAMH_CS_N | ~RAML_CS_N | ~ROM_CS_N | ~SRAM_CS_N) & ~MEM_RD_N),
 	.mem_wr(cart_download ? {2'b00,{2{ioctl_wait}}} : {4{~RAMH_CS_N | ~RAML_CS_N | ~SRAM_CS_N}} & ~MEM_DQM_N),
+	.mem_chan(cart_download ? 2'd0 : ddr_chan),
 	.mem_16b(cart_download | RAMH_CS_N),
 	.mem_busy(ddr_busy)
 );
@@ -869,10 +887,9 @@ end
 
 
 assign VGA_F1 = 0;
-//assign {AUDIO_L,AUDIO_R} = '0;
 
 reg interlace = 0;
-reg [1:0] resolution = 2'b01;
+//reg [1:0] resolution = 2'b01;
 
 //lock resolution for the whole frame.
 reg [1:0] res = 2'b01;
