@@ -197,6 +197,7 @@ localparam CONF_STR = {
 	"FS,BIN;",
 	"S0,CUE,Insert Disk;",
 	"-;",
+	"oK,Slave enable,No,Yes;",
 	"oG,Time set,No,Yes;",
 	"oHJ,Region,Japan,Taiwan,USA,Brazil,Korea,Asia,Europe;",
 	"-;",
@@ -331,8 +332,8 @@ hps_ext hps_ext
 	.cd_out(cd_out)
 );
 
-wire cart_download = ioctl_download & (ioctl_index[5:0] <= 6'h01);
-wire cdd_download = ioctl_download & (ioctl_index[5:1] == 6'h02>>1);
+wire cart_download = ioctl_download & (ioctl_index[5:2] == 4'b0000);
+wire cdd_download = ioctl_download & (ioctl_index[5:2] == 4'b0001);//[0]:0=speed 1x,1=speed 2x; [1]:0=data,1=cdda;
 
 reg osd_btn = 0;
 //always @(posedge clk_sys) begin
@@ -555,7 +556,6 @@ Saturn saturn
 	.CD_COMSYNC_N(CD_COMSYNC_N),
 	.CD_D(cdc_d),
 	.CD_CK(cdc_wr),
-	.CD_SPD(cdc_speed),
 	.CD_RAM_A(CD_RAM_A),
 	.CD_RAM_D(CD_RAM_D),
 	.CD_RAM_WE(CD_RAM_WE),
@@ -579,7 +579,9 @@ Saturn saturn
 	.JOY1(joy1),
 	
 	.SCRN_EN(SCRN_EN),
-	.PAUSE_EN(DBG_PAUSE_EN)
+	.SND_EN(SND_EN),
+	.PAUSE_EN(DBG_PAUSE_EN),
+	.SSH_EN(status[52])
 );
 
 reg [7:0] HOST_COMM[12];
@@ -673,17 +675,15 @@ always @(posedge clk_sys) begin
 end
 
 
-reg [15:0] cdc_d;
+reg [17:0] cdc_d;
 reg        cdc_wr;
-reg        cdc_speed;
 always @(posedge clk_sys) begin
 	reg [2:0] cnt = 0;
 
 	if (cdd_download && ioctl_wr) begin
 		cnt <= 7;
 		cdc_wr <= 1;
-		cdc_d <= {ioctl_data[7:0],ioctl_data[15:8]};
-		cdc_speed <= ioctl_index[0];
+		cdc_d <= {ioctl_index[1:0],ioctl_data[7:0],ioctl_data[15:8]};
 	end
 	else if (cnt) begin
 		cnt <= cnt - 1'd1;
@@ -750,10 +750,10 @@ wire [1:0] ddr_chan = !ROM_CS_N  ? 2'd0 :
                       !SRAM_CS_N ? 2'd1 :
 							 !RAML_CS_N ? 2'd2 :
 							 2'd3;
-wire [27:1] ddr_addr = !ROM_CS_N  ? {9'b000000000,MEM_A[18:1]} :
-                       !SRAM_CS_N ? {9'b000000001,MEM_A[18:1]} :
-							  !RAML_CS_N ? {8'b00000001, MEM_A[19:1]} :
-							               {8'b00000010, MEM_A[19:2],1'b0};
+wire [27:1] ddr_addr = !ROM_CS_N  ? { 9'b000000000,   MEM_A[18:1]} :
+                       !SRAM_CS_N ? {12'b000000001000,MEM_A[15:1]} :
+							  !RAML_CS_N ? { 8'b00000001,    MEM_A[19:1]} :
+							               { 8'b00000010,    MEM_A[19:2],1'b0};
 wire [31:0] ddr_do;
 wire        ddr_busy;
 ddram ddram
@@ -941,6 +941,7 @@ reg        region_set = 0;
 
 //debug
 reg  [5:0] SCRN_EN = 6'b111111;
+reg  [1:0] SND_EN = 2'b11;
 reg        DBG_PAUSE_EN = 0;
 
 wire       pressed = ps2_key[9];
@@ -959,8 +960,8 @@ always @(posedge clk_sys) begin
 			'h00B: begin SCRN_EN[5] <= ~SCRN_EN[5]; end 	// F6
 			'h083: begin  end 	// F7
 			'h00A: begin  end 	// F8
-			'h001: begin  end 	// F9
-			'h009: begin  end 	// F10
+			'h001: begin SND_EN[0] <= ~SND_EN[0]; end 	// F9
+			'h009: begin SND_EN[1] <= ~SND_EN[1]; end 	// F10
 			'h078: begin  end 	// F11
 			'h177: begin DBG_PAUSE_EN <= ~DBG_PAUSE_EN; end 	// Pause
 		endcase
