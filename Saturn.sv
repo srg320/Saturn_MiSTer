@@ -147,32 +147,44 @@ always_comb begin
 		VIDEO_ARX = 8'd16;
 		VIDEO_ARY = 8'd9;
 	end else begin
-		case(res) // {V30, H40}
-			2'b00: begin // 256 x 224
-				VIDEO_ARX = 8'd64;
-				VIDEO_ARY = 8'd49;
-			end
-
-			2'b01: begin // 320 x 224
+		casez(res)
+			4'b00?0: begin // 320 x 224
 				VIDEO_ARX = status[30] ? 8'd10: 8'd64;
 				VIDEO_ARY = status[30] ? 8'd7 : 8'd49;
 			end
 
-			2'b10: begin // 256 x 240
-				VIDEO_ARX = 8'd128;
-				VIDEO_ARY = 8'd105;
+			4'b00?1: begin // 352 x 224
+				VIDEO_ARX = status[30] ? 8'd22: 8'd64;
+				VIDEO_ARY = status[30] ? 8'd14: 8'd49;
 			end
 
-			2'b11: begin // 320 x 240
+			4'b01?0: begin // 320 x 240
 				VIDEO_ARX = status[30] ? 8'd4 : 8'd128;
 				VIDEO_ARY = status[30] ? 8'd3 : 8'd105;
+			end
+
+			4'b01?1: begin // 352 x 240
+				VIDEO_ARX = status[30] ? 8'd22: 8'd128;
+				VIDEO_ARY = status[30] ? 8'd15: 8'd105;
+			end
+
+			4'b10?0: begin // 320 x 256
+				VIDEO_ARX = status[30] ? 8'd5 : 8'd64;
+				VIDEO_ARY = status[30] ? 8'd4 : 8'd49;
+			end
+
+			4'b10?1: begin // 352 x 256
+				VIDEO_ARX = status[30] ? 8'd11: 8'd128;
+				VIDEO_ARY = status[30] ? 8'd8 : 8'd105;
+			end
+
+			default: begin // not supported
+				VIDEO_ARX = status[30] ? 8'd10: 8'd64;
+				VIDEO_ARY = status[30] ? 8'd7 : 8'd49;
 			end
 		endcase
 	end
 end
-
-//assign VIDEO_ARX = status[10] ? 8'd16 : ((status[30] && wide_ar) ? 8'd10 : 8'd64);
-//assign VIDEO_ARY = status[10] ? 8'd9  : ((status[30] && wide_ar) ? 8'd7  : 8'd49);
 
 assign AUDIO_S = 1;
 assign AUDIO_MIX = 0;
@@ -197,7 +209,7 @@ localparam CONF_STR = {
 	"FS,BIN;",
 	"S0,CUE,Insert Disk;",
 	"-;",
-	"oK,Slave enable,No,Yes;",
+	"oK,Slave CPU enable,No,Yes;",
 	"oG,Time set,No,Yes;",
 	"oHJ,Region,Japan,Taiwan,USA,Brazil,Korea,Asia,Europe;",
 	"-;",
@@ -209,25 +221,25 @@ localparam CONF_STR = {
 	"P1-;",
 	"P1OT,Border,No,Yes;",
 	"P1oEF,Composite Blend,Off,On,Adaptive;",
-	"P1-;",
-	"P1OEF,Audio Filter,Model 1,Model 2,Minimal,No Filter;",
-	"P1OB,FM Chip,YM2612,YM3438;",
-	"P1ON,HiFi PCM,No,Yes;",
+//	"P1-;",
+//	"P1OEF,Audio Filter,Model 1,Model 2,Minimal,No Filter;",
+//	"P1OB,FM Chip,YM2612,YM3438;",
+//	"P1ON,HiFi PCM,No,Yes;",
 
-	"P2,Input;",
-	"P2-;",
-	"P2O4,Swap Joysticks,No,Yes;",
-	"P2O5,6 Buttons Mode,No,Yes;",
-	"P2o57,Multitap,Disabled,4-Way,TeamPlayer: Port1,TeamPlayer: Port2,J-Cart;",
-	"P2-;",
-	"P2OIJ,Mouse,None,Port1,Port2;",
-	"P2OK,Mouse Flip Y,No,Yes;",
-	"P2-;",
-	"P2oD,Serial,OFF,SNAC;",
-	"P2-;",
-	"P2o89,Gun Control,Disabled,Joy1,Joy2,Mouse;",
-	"D4P2oA,Gun Fire,Joy,Mouse;",
-	"D4P2oBC,Cross,Small,Medium,Big,None;",
+//	"P2,Input;",
+//	"P2-;",
+//	"P2O4,Swap Joysticks,No,Yes;",
+//	"P2O5,6 Buttons Mode,No,Yes;",
+//	"P2o57,Multitap,Disabled,4-Way,TeamPlayer: Port1,TeamPlayer: Port2,J-Cart;",
+//	"P2-;",
+//	"P2OIJ,Mouse,None,Port1,Port2;",
+//	"P2OK,Mouse Flip Y,No,Yes;",
+//	"P2-;",
+//	"P2oD,Serial,OFF,SNAC;",
+//	"P2-;",
+//	"P2o89,Gun Control,Disabled,Joy1,Joy2,Mouse;",
+//	"D4P2oA,Gun Fire,Joy,Mouse;",
+//	"D4P2oBC,Cross,Small,Medium,Big,None;",
 
 	"-;",
 	"R0,Reset;",
@@ -322,6 +334,9 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
 
 );
 
+reg  [1:0] region_req;
+reg        region_set = 0;
+
 reg [96:0] cd_in;
 wire [96:0] cd_out;
 hps_ext hps_ext
@@ -380,7 +395,7 @@ wire  [3:0] area_code = status[51:49] == 3'd0 ? 4'h1 :	//Japan area
 wire [15:0] joy1 = {~joystick_0[0],~joystick_0[1],~joystick_0[2],~joystick_0[3],~joystick_0[7],~joystick_0[4],~joystick_0[6],~joystick_0[5],
                     ~joystick_0[8],~joystick_0[9],~joystick_0[10],~joystick_0[11],~joystick_0[12],3'b111};
 
-//Genesis
+
 wire [24:0] MEM_A;
 wire [31:0] MEM_DI;
 wire [31:0] MEM_DO;
@@ -453,16 +468,20 @@ wire        CD_RAM_CS;
 wire [15:0] CD_RAM_Q;
 wire        CD_RAM_RDY;
 
-wire [7:0] r, g, b;
-wire vs,hs;
-wire ce_pix;
-wire hblank, vblank;
+wire  [7:0] R, G, B;
+wire        HS_N,VS_N;
+wire        DCLK;
+wire        HBL_N, VBL_N;
+wire        FIELD;
+wire        INTERLACE;
+wire  [1:0] HRES;
+wire  [1:0] VRES;
 
 wire SCSP_CE;
 CEGen SCSP_CEGen
 (
 	.CLK(clk_sys),
-	.RST_N(~reset),
+	.RST_N(1/*RST_N*/),
 	.IN_CLK(53693175),
 	.OUT_CLK(22579200),
 	.CE(SCSP_CE)
@@ -472,9 +491,9 @@ wire CD_CE;
 CEGen CD_CEGen
 (
 	.CLK(clk_sys),
-	.RST_N(~reset),
+	.RST_N(1/*RST_N*/),
 	.IN_CLK(53693175),
-	.OUT_CLK(40000000),
+	.OUT_CLK(20000000*2),
 	.CE(CD_CE)
 );
 
@@ -564,14 +583,19 @@ Saturn saturn
 	.CD_RAM_Q(CD_RAM_Q),
 	.CD_RAM_RDY(CD_RAM_RDY),
 	
-	.R(r),
-	.G(g),
-	.B(b),
-	.DCLK(ce_pix),
-	.VS_N(vs),
-	.HS_N(hs),
-	.HBL_N(hblank),
-	.VBL_N(vblank),
+	.R(R),
+	.G(G),
+	.B(B),
+	.DCLK(DCLK),
+	.VS_N(VS_N),
+	.HS_N(HS_N),
+	.HBL_N(HBL_N),
+	.VBL_N(VBL_N),
+	
+	.FIELD(FIELD),
+	.INTERLACE(INTERLACE),
+	.HRES(HRES), 				//[1]:0-normal,1-hi-res; [0]:0-320p,1-352p
+	.VRES(VRES), 				//0-224,1-240,2-256
 	
 	.SOUND_L(AUDIO_L),
 	.SOUND_R(AUDIO_R),
@@ -580,7 +604,9 @@ Saturn saturn
 	
 	.SCRN_EN(SCRN_EN),
 	.SND_EN(SND_EN),
-	.PAUSE_EN(DBG_PAUSE_EN),
+	.DBG_PAUSE(DBG_PAUSE),
+	.DBG_BREAK(DBG_BREAK),
+	.DBG_RUN(DBG_RUN),
 	.SSH_EN(status[52])
 );
 
@@ -658,11 +684,9 @@ always @(posedge clk_sys) begin
 		byte_cnt <= byte_cnt + 4'd1;
 		if (byte_cnt < 4'd11) begin
 			CDD_DATA <= CDD_STAT[byte_cnt + 4'd1];
-//			cdd_trans_next <= 1;
 			cdd_next_delay <= 10'h3FF;
 		end else if (byte_cnt == 4'd11) begin
 			CDD_DATA <= 8'h00;
-//			cdd_trans_next <= 1;
 			cdd_next_delay <= 10'h3FF;
 			cdd_comm_rdy <= 1;
 		end
@@ -727,16 +751,19 @@ sdram sdram
 	.wrh1(CD_RAM_WE[1] & CD_RAM_CS),
 	.busy1(sdr_busy1),
 
-	.addr2('0),
-	.din2('0),
-	.dout2(),
-	.rd2(0),
-	.wrl2(0),
-	.wrh2(0),
+	.addr2({6'b000010,VDP1_VRAM_A[18:1]}),
+	.din2(VDP1_VRAM_D),
+	.dout2(sdr_do),
+	.rd2(VDP1_VRAM_RD),
+	.wrl2(VDP1_VRAM_WE[0]),
+	.wrh2(VDP1_VRAM_WE[1]),
 	.busy2(sdr_busy2)
 );
 assign SCSP_RAM_RDY = ~sdr_busy0;
 assign CD_RAM_RDY = ~sdr_busy1;
+assign VDP1_VRAM_Q = {2{sdr_do}};
+assign VDP1_VRAM_ARDY = sdr_busy2;
+assign VDP1_VRAM_DRDY = ~sdr_busy2;
 
 always @(posedge clk_sys) begin
 	reg old_busy;
@@ -829,15 +856,15 @@ sdram2 sdram2
 	
 	.ch2addr({3'b000,VDP1_VRAM_A[18:1]}),
 	.ch2din(VDP1_VRAM_D),
-	.ch2wr(VDP1_VRAM_WE),
-	.ch2rd(VDP1_VRAM_RD),
+	.ch2wr('0/*VDP1_VRAM_WE*/),
+	.ch2rd(0/*VDP1_VRAM_RD*/),
 	.ch2dout(sdr2ch2_do),
 	.ch2ardy(sdr2ch2_ardy),
 	.ch2drdy(sdr2ch2_drdy)
 );
-assign VDP1_VRAM_Q = sdr2ch2_do;
-assign VDP1_VRAM_ARDY = sdr2ch2_ardy;
-assign VDP1_VRAM_DRDY = sdr2ch2_drdy;
+//assign VDP1_VRAM_Q = sdr2ch2_do;
+//assign VDP1_VRAM_ARDY = sdr2ch2_ardy;
+//assign VDP1_VRAM_DRDY = sdr2ch2_drdy;
 `else
 
 `endif
@@ -862,7 +889,6 @@ assign VDP1_VRAM_DRDY = sdr2ch2_drdy;
 
 
 
-
 wire PAL = status[7];
 
 reg new_vmode;
@@ -882,73 +908,68 @@ always @(posedge clk_sys) begin
 	end
 end
 
-
-
-
-
 assign VGA_F1 = 0;
 
-reg interlace = 0;
-//reg [1:0] resolution = 2'b01;
-
 //lock resolution for the whole frame.
-reg [1:0] res = 2'b01;
-//always @(posedge clk_sys) begin
-//	reg old_vbl;
-//	
-//	old_vbl <= vblank;
-//	if(old_vbl & ~vblank) res <= resolution;
-//end
+reg [3:0] res = 4'b0000;
+always @(posedge clk_sys) begin
+	reg old_vbl;
+	
+	old_vbl <= VBL_N;
+	if(old_vbl & ~VBL_N) res <= {VRES,HRES};
+end
 
 
 wire [2:0] scale = status[3:1];
 wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
 
 assign CLK_VIDEO = clk_ram;
-assign VGA_SL = {~interlace,~interlace}&sl[1:0];
+assign VGA_SL = {~INTERLACE,~INTERLACE} & sl[1:0];
 
-reg old_ce_pix;
-always @(posedge CLK_VIDEO) old_ce_pix <= ce_pix;
+reg DCLK_OLD;
+always @(posedge CLK_VIDEO) DCLK_OLD <= DCLK;
+wire ce_pix = DCLK & ~DCLK_OLD;
 
-video_mixer #(.LINE_LENGTH(320), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
+video_mixer #(.LINE_LENGTH(352), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 (
 	.*,
 
 	.clk_vid(CLK_VIDEO),
-	.ce_pix(~old_ce_pix & ce_pix),
+	.ce_pix(ce_pix),
 	.ce_pix_out(CE_PIXEL),
 
 	.scanlines(0),
-	.scandoubler(~interlace && (scale || forced_scandoubler)),
+	.scandoubler(~INTERLACE && (scale || forced_scandoubler)),
 	.hq2x(scale==1),
 
 	.mono(0),
 
-	.R(r),
-	.G(g),
-	.B(b),
+	.R(R),
+	.G(G),
+	.B(B),
 
 	// Positive pulses.
-	.HSync(~hs),
-	.VSync(~vs),
-	.HBlank(~hblank),
-	.VBlank(~vblank)
+	.HSync(~HS_N),
+	.VSync(~VS_N),
+	.HBlank(~HBL_N),
+	.VBlank(~VBL_N)
 );
-
-reg  [1:0] region_req;
-reg        region_set = 0;
 
 
 //debug
 reg  [5:0] SCRN_EN = 6'b111111;
 reg  [1:0] SND_EN = 2'b11;
-reg        DBG_PAUSE_EN = 0;
+reg        DBG_PAUSE = 0;
+reg        DBG_BREAK = 0;
+reg        DBG_RUN = 0;
 
 wire       pressed = ps2_key[9];
 wire [8:0] code    = ps2_key[8:0];
 always @(posedge clk_sys) begin
 	reg old_state = 0;
 
+	DBG_RUN <= 0;
+	
 	old_state <= ps2_key[10];
 	if((ps2_key[10] != old_state) && pressed) begin
 		casex(code)
@@ -958,12 +979,12 @@ always @(posedge clk_sys) begin
 			'h00C: begin SCRN_EN[3] <= ~SCRN_EN[3]; end 	// F4
 			'h003: begin SCRN_EN[4] <= ~SCRN_EN[4]; end 	// F5
 			'h00B: begin SCRN_EN[5] <= ~SCRN_EN[5]; end 	// F6
-			'h083: begin  end 	// F7
-			'h00A: begin  end 	// F8
-			'h001: begin SND_EN[0] <= ~SND_EN[0]; end 	// F9
-			'h009: begin SND_EN[1] <= ~SND_EN[1]; end 	// F10
+			'h083: begin SND_EN[0] <= ~SND_EN[0]; end 	// F7
+			'h00A: begin SND_EN[1] <= ~SND_EN[1]; end 	// F8
+			'h001: begin DBG_BREAK <= ~DBG_BREAK; end 	// F9
+			'h009: begin DBG_RUN <= 1; end 	// F10
 			'h078: begin  end 	// F11
-			'h177: begin DBG_PAUSE_EN <= ~DBG_PAUSE_EN; end 	// Pause
+			'h177: begin DBG_PAUSE <= ~DBG_PAUSE; end 	// Pause
 		endcase
 	end
 end

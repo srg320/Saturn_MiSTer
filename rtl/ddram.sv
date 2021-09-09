@@ -90,21 +90,65 @@ always @(posedge clk) begin
 					if (cache_addr[chan][27:4] == addr[27:4]) begin
 						if (word) 
 							case (addr[3:1])
-								3'b000: cache_data[chan][127:112] <= din[15:0];
-								3'b001: cache_data[chan][111:096] <= din[15:0];
-								3'b010: cache_data[chan][095:080] <= din[15:0];
-								3'b011: cache_data[chan][079:064] <= din[15:0];
-								3'b100: cache_data[chan][063:048] <= din[15:0];
-								3'b101: cache_data[chan][047:032] <= din[15:0];
-								3'b110: cache_data[chan][031:016] <= din[15:0];
-								3'b111: cache_data[chan][015:000] <= din[15:0];
+								3'b000: begin
+									if (wr[1]) cache_data[chan][127:120] <= din[15:8];
+									if (wr[0]) cache_data[chan][119:112] <= din[7:0];
+								end
+								3'b001: begin
+									if (wr[1]) cache_data[chan][111:104] <= din[15:8];
+									if (wr[0]) cache_data[chan][103:096] <= din[7:0];
+								end
+								3'b010: begin
+									if (wr[1]) cache_data[chan][095:088] <= din[15:8];
+									if (wr[0]) cache_data[chan][087:080] <= din[7:0];
+								end
+								3'b011: begin
+									if (wr[1]) cache_data[chan][079:072] <= din[15:8];
+									if (wr[0]) cache_data[chan][071:064] <= din[7:0];
+								end
+								3'b100: begin
+									if (wr[1]) cache_data[chan][063:056] <= din[15:8];
+									if (wr[0]) cache_data[chan][055:048] <= din[7:0];
+								end
+								3'b101: begin
+									if (wr[1]) cache_data[chan][047:040] <= din[15:8];
+									if (wr[0]) cache_data[chan][039:032] <= din[7:0];
+								end
+								3'b110: begin
+									if (wr[1]) cache_data[chan][031:024] <= din[15:8];
+									if (wr[0]) cache_data[chan][023:016] <= din[7:0];
+								end
+								3'b111: begin
+									if (wr[1]) cache_data[chan][015:008] <= din[15:8];
+									if (wr[0]) cache_data[chan][007:000] <= din[7:0];
+								end
 							endcase
 						else
 							case (addr[3:2])
-								2'b00: cache_data[chan][127:096] <= din;
-								2'b01: cache_data[chan][095:064] <= din;
-								2'b10: cache_data[chan][063:032] <= din;
-								2'b11: cache_data[chan][031:000] <= din;
+								2'b00: begin
+									if (wr[3]) cache_data[chan][127:120] <= din[31:24];
+									if (wr[2]) cache_data[chan][119:112] <= din[23:16];
+									if (wr[1]) cache_data[chan][111:104] <= din[15:8];
+									if (wr[0]) cache_data[chan][103:096] <= din[7:0];
+								end
+								2'b01: begin
+									if (wr[3]) cache_data[chan][095:088] <= din[31:24];
+									if (wr[2]) cache_data[chan][087:080] <= din[23:16];
+									if (wr[1]) cache_data[chan][079:072] <= din[15:8];
+									if (wr[0]) cache_data[chan][071:064] <= din[7:0];
+								end
+								2'b10: begin
+									if (wr[3]) cache_data[chan][063:056] <= din[31:24];
+									if (wr[2]) cache_data[chan][055:048] <= din[23:16];
+									if (wr[1]) cache_data[chan][047:040] <= din[15:8];
+									if (wr[0]) cache_data[chan][039:032] <= din[7:0];
+								end
+								2'b11: begin
+									if (wr[3]) cache_data[chan][031:024] <= din[31:24];
+									if (wr[2]) cache_data[chan][023:016] <= din[23:16];
+									if (wr[1]) cache_data[chan][015:008] <= din[15:8];
+									if (wr[0]) cache_data[chan][007:000] <= din[7:0];
+								end
 							endcase
 //					end else begin
 //						cache_addr[chan] <= '1;
