@@ -607,7 +607,11 @@ Saturn saturn
 	.DBG_PAUSE(DBG_PAUSE),
 	.DBG_BREAK(DBG_BREAK),
 	.DBG_RUN(DBG_RUN),
-	.SSH_EN(status[52])
+	.SSH_EN(status[52]),
+	.H320_END_INC(H320_END_INC),
+	.H320_END_DEC(H320_END_DEC),
+	.H352_END_INC(H352_END_INC),
+	.H352_END_DEC(H352_END_DEC)
 );
 
 reg [7:0] HOST_COMM[12];
@@ -930,7 +934,7 @@ reg DCLK_OLD;
 always @(posedge CLK_VIDEO) DCLK_OLD <= DCLK;
 wire ce_pix = DCLK & ~DCLK_OLD;
 
-video_mixer #(.LINE_LENGTH(352), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
+video_mixer #(.LINE_LENGTH(360), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 (
 	.*,
 
@@ -963,12 +967,21 @@ reg        DBG_PAUSE = 0;
 reg        DBG_BREAK = 0;
 reg        DBG_RUN = 0;
 
+reg        H320_END_INC = 0;
+reg        H320_END_DEC = 0;
+reg        H352_END_INC = 0;
+reg        H352_END_DEC = 0;
+
 wire       pressed = ps2_key[9];
 wire [8:0] code    = ps2_key[8:0];
 always @(posedge clk_sys) begin
 	reg old_state = 0;
 
 	DBG_RUN <= 0;
+	H320_END_INC <= 0;
+	H320_END_DEC <= 0;
+	H352_END_INC <= 0;
+	H352_END_DEC <= 0;
 	
 	old_state <= ps2_key[10];
 	if((ps2_key[10] != old_state) && pressed) begin
@@ -985,6 +998,12 @@ always @(posedge clk_sys) begin
 			'h009: begin DBG_RUN <= 1; end 	// F10
 			'h078: begin  end 	// F11
 			'h177: begin DBG_PAUSE <= ~DBG_PAUSE; end 	// Pause
+			
+			'h016: begin H320_END_INC <= 1; end 	// 1
+			'h01E: begin H320_END_DEC <= 1; end 	// 2
+			'h026: begin H352_END_INC <= 1; end 	// 3
+			'h025: begin H352_END_DEC <= 1; end 	// 4
+
 		endcase
 	end
 end
