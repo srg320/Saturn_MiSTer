@@ -133,7 +133,7 @@ module emu
 
 assign ADC_BUS  = 'Z;
 assign {UART_RTS, UART_TXD, UART_DTR} = 0;
-assign BUTTONS   = osd_btn;
+assign BUTTONS   = {1'b0,osd_btn};
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign USER_OUT = '0;
 
@@ -412,8 +412,7 @@ wire [15:0] VDP1_VRAM_D;
 wire [31:0] VDP1_VRAM_Q;
 wire  [1:0] VDP1_VRAM_WE;
 wire        VDP1_VRAM_RD;
-wire        VDP1_VRAM_ARDY;
-wire        VDP1_VRAM_DRDY;
+wire        VDP1_VRAM_RDY;
 wire [17:1] VDP1_FB0_A;
 wire [15:0] VDP1_FB0_D;
 wire [15:0] VDP1_FB0_Q;
@@ -425,25 +424,19 @@ wire [15:0] VDP1_FB1_Q;
 wire        VDP1_FB1_WE;
 wire        VDP1_FB1_RD;
 
-wire [16:1] VDP2_RA0_A;
-wire [15:0] VDP2_RA0_D;
-wire  [1:0] VDP2_RA0_WE;
-wire        VDP2_RA0_RD;
-wire [31:0] VDP2_RA0_Q;
+wire [18:1] VDP2_RA0_A;
 wire [16:1] VDP2_RA1_A;
-wire [15:0] VDP2_RA1_D;
-wire  [1:0] VDP2_RA1_WE;
-wire        VDP2_RA1_RD;
+wire [31:0] VDP2_RA_D;
+wire  [3:0] VDP2_RA_WE;
+wire        VDP2_RA_RD;
+wire [31:0] VDP2_RA0_Q;
 wire [31:0] VDP2_RA1_Q;
-wire [16:1] VDP2_RB0_A;
-wire [15:0] VDP2_RB0_D;
-wire  [1:0] VDP2_RB0_WE;
-wire        VDP2_RB0_RD;
-wire [31:0] VDP2_RB0_Q;
+wire [18:1] VDP2_RB0_A;
 wire [16:1] VDP2_RB1_A;
-wire [15:0] VDP2_RB1_D;
-wire  [1:0] VDP2_RB1_WE;
-wire        VDP2_RB1_RD;
+wire [31:0] VDP2_RB_D;
+wire  [3:0] VDP2_RB_WE;
+wire        VDP2_RB_RD;
+wire [31:0] VDP2_RB0_Q;
 wire [31:0] VDP2_RB1_Q;
 
 wire [18:1] SCSP_RAM_A;
@@ -477,24 +470,34 @@ wire        INTERLACE;
 wire  [1:0] HRES;
 wire  [1:0] VRES;
 
-wire SCSP_CE;
+wire SCSP_CE;		//SCSP clock 22.5792MHz
 CEGen SCSP_CEGen
 (
 	.CLK(clk_sys),
 	.RST_N(1/*RST_N*/),
-	.IN_CLK(53693175),
+	.IN_CLK(57272720),
 	.OUT_CLK(22579200),
 	.CE(SCSP_CE)
 );
 
-wire CD_CE;
+wire CD_CE;			//CD clock freq 20.000MHz
 CEGen CD_CEGen
 (
 	.CLK(clk_sys),
 	.RST_N(1/*RST_N*/),
-	.IN_CLK(53693175),
+	.IN_CLK(57272720),
 	.OUT_CLK(20000000*2),
 	.CE(CD_CE)
+);
+
+wire CDD_2X_CE;	//CD data clock 44.1kHz x 2(channel) x 2(speed)
+CEGen CDD_CEGen
+(
+	.CLK(clk_sys),
+	.RST_N(1/*RST_N*/),
+	.IN_CLK(57272720),
+	.OUT_CLK(44100*2*2),
+	.CE(CDD_2X_CE)
 );
 
 Saturn saturn
@@ -502,6 +505,7 @@ Saturn saturn
 	.RST_N(~(reset|cart_download)),
 	.CLK(clk_sys),
 	.CE(1),
+	.EN(1),
 	
 	.SRES_N(~status[0]),
 	
@@ -524,8 +528,7 @@ Saturn saturn
 	.VDP1_VRAM_WE(VDP1_VRAM_WE),
 	.VDP1_VRAM_RD(VDP1_VRAM_RD),
 	.VDP1_VRAM_Q(VDP1_VRAM_Q),
-	.VDP1_VRAM_ARDY(VDP1_VRAM_ARDY),
-	.VDP1_VRAM_DRDY(VDP1_VRAM_DRDY),
+	.VDP1_VRAM_RDY(VDP1_VRAM_RDY),
 	.VDP1_FB0_A(VDP1_FB0_A),
 	.VDP1_FB0_D(VDP1_FB0_D),
 	.VDP1_FB0_WE(VDP1_FB0_WE),
@@ -538,24 +541,18 @@ Saturn saturn
 	.VDP1_FB1_Q(VDP1_FB1_Q),
 		
 	.VDP2_RA0_A(VDP2_RA0_A),
-	.VDP2_RA0_D(VDP2_RA0_D),
-	.VDP2_RA0_WE(VDP2_RA0_WE),
-	.VDP2_RA0_RD(VDP2_RA0_RD),
-	.VDP2_RA0_Q(VDP2_RA0_Q),
 	.VDP2_RA1_A(VDP2_RA1_A),
-	.VDP2_RA1_D(VDP2_RA1_D),
-	.VDP2_RA1_WE(VDP2_RA1_WE),
-	.VDP2_RA1_RD(VDP2_RA1_RD),
+	.VDP2_RA_D(VDP2_RA_D),
+	.VDP2_RA_WE(VDP2_RA_WE),
+	.VDP2_RA_RD(VDP2_RA_RD),
+	.VDP2_RA0_Q(VDP2_RA0_Q),
 	.VDP2_RA1_Q(VDP2_RA1_Q),
 	.VDP2_RB0_A(VDP2_RB0_A),
-	.VDP2_RB0_D(VDP2_RB0_D),
-	.VDP2_RB0_WE(VDP2_RB0_WE),
-	.VDP2_RB0_RD(VDP2_RB0_RD),
-	.VDP2_RB0_Q(VDP2_RB0_Q),
 	.VDP2_RB1_A(VDP2_RB1_A),
-	.VDP2_RB1_D(VDP2_RB1_D),
-	.VDP2_RB1_WE(VDP2_RB1_WE),
-	.VDP2_RB1_RD(VDP2_RB1_RD),
+	.VDP2_RB_D(VDP2_RB_D),
+	.VDP2_RB_WE(VDP2_RB_WE),
+	.VDP2_RB_RD(VDP2_RB_RD),
+	.VDP2_RB0_Q(VDP2_RB0_Q),
 	.VDP2_RB1_Q(VDP2_RB1_Q),
 	
 	.SCSP_CE(SCSP_CE),
@@ -568,6 +565,7 @@ Saturn saturn
 	.SCSP_RAM_RDY(SCSP_RAM_RDY),
 	
 	.CD_CE(CD_CE),
+	.CDD_CE(CDD_2X_CE),
 	.CD_CDATA(CD_CDATA),
 	.CD_HDATA(CD_HDATA),
 	.CD_COMCLK(CD_COMCLK),
@@ -575,6 +573,8 @@ Saturn saturn
 	.CD_COMSYNC_N(CD_COMSYNC_N),
 	.CD_D(cdc_d),
 	.CD_CK(cdc_wr),
+	.CD_SPEED(cdc_speed),
+	.CD_AUDIO(cdc_audio),
 	.CD_RAM_A(CD_RAM_A),
 	.CD_RAM_D(CD_RAM_D),
 	.CD_RAM_WE(CD_RAM_WE),
@@ -703,22 +703,48 @@ always @(posedge clk_sys) begin
 end
 
 
-reg [17:0] cdc_d;
+reg [15:0] cdc_d;
 reg        cdc_wr;
+reg        cdc_speed;
+reg        cdc_audio;
 always @(posedge clk_sys) begin
-	reg [2:0] cnt = 0;
+	reg [1:0] cnt = 0;
+	reg [1:0] state = 0;
 
-	if (cdd_download && ioctl_wr) begin
-		cnt <= 7;
-		cdc_wr <= 1;
-		cdc_d <= {ioctl_index[1:0],ioctl_data[7:0],ioctl_data[15:8]};
-	end
-	else if (cnt) begin
-		cnt <= cnt - 1'd1;
-	end
-	else begin
-		cdc_wr <= 0;
-	end
+	case (state)
+		0: if (cdd_download && ioctl_wr) begin
+			{cdc_audio,cdc_speed} <= ioctl_data[1:0];
+			state <= 1;
+		end
+		
+		1: if (!cdd_download) begin
+			state <= 0;
+		end else if (cdd_download && ioctl_wr) begin
+			cnt <= 3;
+			cdc_wr <= 1;
+			cdc_d[15:0] <= {ioctl_data[7:0],ioctl_data[15:8]};
+			state <= 2;
+		end
+		
+		2: begin
+			cnt <= cnt - 1'd1;
+			if (!cnt) begin
+				cdc_wr <= 0;
+				state <= 1;
+			end
+		end
+	endcase
+//	if (cdd_download && ioctl_wr) begin
+//		cnt <= 7;
+//		cdc_wr <= 1;
+//		cdc_d <= {ioctl_index[1:0],ioctl_data[7:0],ioctl_data[15:8]};
+//	end
+//	else if (cnt) begin
+//		cnt <= cnt - 1'd1;
+//	end
+//	else begin
+//		cdc_wr <= 0;
+//	end
 end
 
 
@@ -758,51 +784,106 @@ sdram sdram
 	.addr2({6'b000010,VDP1_VRAM_A[18:1]}),
 	.din2(VDP1_VRAM_D),
 	.dout2(sdr_do),
-	.rd2(VDP1_VRAM_RD),
-	.wrl2(VDP1_VRAM_WE[0]),
-	.wrh2(VDP1_VRAM_WE[1]),
+	.rd2(0/*VDP1_VRAM_RD*/),
+	.wrl2(0/*VDP1_VRAM_WE[0]*/),
+	.wrh2(0/*VDP1_VRAM_WE[1]*/),
 	.busy2(sdr_busy2)
 );
 assign SCSP_RAM_RDY = ~sdr_busy0;
 assign CD_RAM_RDY = ~sdr_busy1;
-assign VDP1_VRAM_Q = {2{sdr_do}};
-assign VDP1_VRAM_ARDY = sdr_busy2;
-assign VDP1_VRAM_DRDY = ~sdr_busy2;
+//assign VDP1_VRAM_Q = {2{sdr_do}};
+//assign VDP1_VRAM_ARDY = sdr_busy2;
+//assign VDP1_VRAM_DRDY = ~sdr_busy2;
 
 always @(posedge clk_sys) begin
 	reg old_busy;
 	
-	old_busy <= ddr_busy;
-	if(cart_download & ioctl_wr) ioctl_wait <= 1;
-	if(old_busy & ~ddr_busy) ioctl_wait <= 0;
+	old_busy <= ddr_busy[5];
+	if (cart_download && ioctl_addr[24:4] && !ioctl_addr[3:1] && ioctl_wr) ioctl_wait <= 1;
+	if (~ddr_busy[5] && old_busy) ioctl_wait <= 0;
 end
 
-wire [1:0] ddr_chan = !ROM_CS_N  ? 2'd0 :
-                      !SRAM_CS_N ? 2'd1 :
-							 !RAML_CS_N ? 2'd2 :
-							 2'd3;
-wire [27:1] ddr_addr = !ROM_CS_N  ? { 9'b000000000,   MEM_A[18:1]} :
-                       !SRAM_CS_N ? {12'b000000001000,MEM_A[15:1]} :
-							  !RAML_CS_N ? { 8'b00000001,    MEM_A[19:1]} :
-							               { 8'b00000010,    MEM_A[19:2],1'b0};
-wire [31:0] ddr_do;
-wire        ddr_busy;
+parameter bit [7:0] SRAM_INIT[16] = '{8'h42,8'h61,8'h63,8'h6B,8'h55,8'h70,8'h52,8'h61,8'h6D,8'h20,8'h46,8'h6F,8'h72,8'h6D,8'h61,8'h74};
+wire [7:0] SRAM_INIT_DATA = !ioctl_addr[15:7] ? SRAM_INIT[ioctl_addr[4:1]] : 8'h00;
+wire       SRAM_INIT_WE = 0;//cart_download & ~|ioctl_addr[18:16] & ioctl_wr;
+
+wire [31:0] ddr_do[7];
+wire        ddr_busy[7];
 ddram ddram
 (
 	.*,
 	.clk(clk_ram),
 
-	.mem_addr(cart_download ? {3'b000,ioctl_addr[24:1]} : ddr_addr),
-	.mem_dout(ddr_do),
-	.mem_din(cart_download ? {ioctl_data[7:0],ioctl_data[15:8]} : MEM_DO),
-	.mem_rd(cart_download ? 1'b0 : (~RAMH_CS_N | ~RAML_CS_N | ~ROM_CS_N | ~SRAM_CS_N) & ~MEM_RD_N),
-	.mem_wr(cart_download ? {2'b00,{2{ioctl_wait}}} : {4{~RAMH_CS_N | ~RAML_CS_N | ~SRAM_CS_N}} & ~MEM_DQM_N),
-	.mem_chan(cart_download ? 2'd0 : ddr_chan),
-	.mem_16b(cart_download | RAMH_CS_N),
-	.mem_busy(ddr_busy)
+	//VDP1 VRAM
+	.mem0_addr({ 9'b000001000,VDP1_VRAM_A[18:1]}    ),
+	.mem0_din ({16'h0000,VDP1_VRAM_D}               ),
+	.mem0_wr  ({2'b00,VDP1_VRAM_WE}                 ),
+	.mem0_rd  (VDP1_VRAM_RD                         ),
+	.mem0_dout(ddr_do[0]                            ),
+	.mem0_16b (1                                    ),
+	.mem0_busy(ddr_busy[0]                          ),
+
+	//CPU bus (ROM)
+	.mem1_addr({ 9'b000000000,   MEM_A[18:1]}       ),
+	.mem1_din ('0                                   ),
+	.mem1_wr  (4'b0000                              ),
+	.mem1_rd  (~ROM_CS_N & ~MEM_RD_N                ),
+	.mem1_dout(ddr_do[1]                            ),
+	.mem1_16b (1                                    ),
+	.mem1_busy(ddr_busy[1]                          ),
+
+	//CPU bus (RAMH)
+	.mem2_addr({ 8'b00000010,    MEM_A[19:2],1'b0}  ),
+	.mem2_din (MEM_DO                               ),
+	.mem2_wr  ({4{~RAMH_CS_N}} & ~MEM_DQM_N         ),
+	.mem2_rd  (~RAMH_CS_N & ~MEM_RD_N               ),
+	.mem2_dout(ddr_do[2]                            ),
+	.mem2_16b (0                                    ),
+	.mem2_busy(ddr_busy[2]                          ),
+	
+	//CPU bus (RAML)
+	.mem3_addr({ 8'b00000001,    MEM_A[19:1]}       ),
+	.mem3_din (MEM_DO                               ),
+	.mem3_wr  ({4{~RAML_CS_N}} & ~MEM_DQM_N         ),
+	.mem3_rd  (~RAML_CS_N & ~MEM_RD_N               ),
+	.mem3_dout(ddr_do[3]                            ),
+	.mem3_16b (1                                    ),
+	.mem3_busy(ddr_busy[3]                          ),
+	
+	//CPU bus (SRAM)
+	.mem4_addr({12'b000000001000,MEM_A[15:1]}       ),
+	.mem4_din (MEM_DO                               ),
+	.mem4_wr  ({4{~SRAM_CS_N}} & ~MEM_DQM_N         ),
+	.mem4_rd  (~SRAM_CS_N & ~MEM_RD_N               ),
+	.mem4_dout(ddr_do[4]                            ),
+	.mem4_16b (1                                    ),
+	.mem4_busy(ddr_busy[4]                          ),
+	
+	//BIOS (ROM)
+	.mem5_addr({ 9'b000000000,ioctl_addr[18:1]}     ),
+	.mem5_din ({ioctl_data[7:0],ioctl_data[15:8]}   ),
+	.mem5_wr  ({2'b00,{2{cart_download & ioctl_wr}}}),
+	.mem5_rd  (0                                    ),
+	.mem5_dout(ddr_do[5]                            ),
+	.mem5_16b (1                                    ),
+	.mem5_busy(ddr_busy[5]                          ),
+	
+	//SRAM backup
+	.mem6_addr({12'b000000001000,ioctl_addr[15:1]}  ),
+	.mem6_din ({24'h0000FF,SRAM_INIT_DATA}          ),
+	.mem6_wr  ({2'b00,{2{SRAM_INIT_WE}}}            ),
+	.mem6_rd  (0                                    ),
+	.mem6_dout(ddr_do[6]                            ),
+	.mem6_16b (1                                    ),
+	.mem6_busy(ddr_busy[6]                          )
 );
-assign MEM_DI     = ddr_do;
-assign MEM_WAIT_N = ~ddr_busy;
+assign VDP1_VRAM_Q = {2{ddr_do[0][15:0]}};
+assign VDP1_VRAM_RDY = ~ddr_busy[0];
+assign MEM_DI     = !ROM_CS_N  ? ddr_do[1] :
+                    !SRAM_CS_N ? ddr_do[4] :
+						  !RAML_CS_N ? ddr_do[3] :
+							            ddr_do[2];
+assign MEM_WAIT_N = ~(ddr_busy[1] | ddr_busy[2] | ddr_busy[3] | ddr_busy[4]);
 
 vdp1_fb vdp1_fb0
 //spiram #(17,16) vdp1_fb0
@@ -810,7 +891,7 @@ vdp1_fb vdp1_fb0
 	.clock(clk_sys),
 	.address({VDP1_FB0_A[9:1],VDP1_FB0_A[17:10]}),
 	.data(VDP1_FB0_D),
-	.wren(VDP1_FB0_WE),
+	.wren({2{VDP1_FB0_WE}}),
 	.q(VDP1_FB0_Q)
 );
 
@@ -820,7 +901,7 @@ vdp1_fb vdp1_fb1
 	.clock(clk_sys),
 	.address({VDP1_FB1_A[9:1],VDP1_FB1_A[17:10]}),
 	.data(VDP1_FB1_D),
-	.wren(VDP1_FB1_WE),
+	.wren({2{VDP1_FB1_WE}}),
 	.q(VDP1_FB1_Q)
 );
 
@@ -838,23 +919,23 @@ sdram2 sdram2
 	.SDRAM_nRAS(SDRAM2_nRAS),
 	.SDRAM_nCAS(SDRAM2_nCAS),
 	
-	.init(~locked),
 	.clk(clk_ram),
+	.init(~locked),
 	.sync(ce_pix),
 
-	.addr_a0({|VDP2_RA1_WE,3'b0000,VDP2_RA0_A}), // 0000000-001FFFF
-	.addr_a1({|VDP2_RA1_WE,3'b0000,VDP2_RA1_A}),
-	.din_a(VDP2_RA0_D),
-	.wr_a(VDP2_RA0_WE|VDP2_RA1_WE),
-	.rd_a(VDP2_RA0_RD|VDP2_RA1_RD),
+	.addr_a0({VDP2_RA0_A[18:17],3'b0000,VDP2_RA0_A[16:1]}),
+	.addr_a1({                  3'b0000,VDP2_RA1_A[16:1]}),
+	.din_a(VDP2_RA_D),
+	.wr_a(VDP2_RA_WE),
+	.rd_a(VDP2_RA_RD),
 	.dout_a0(VDP2_RA0_Q),
 	.dout_a1(VDP2_RA1_Q),
 
-	.addr_b0({|VDP2_RB1_WE,3'b0000,VDP2_RB0_A}),
-	.addr_b1({|VDP2_RB1_WE,3'b0000,VDP2_RB1_A}),
-	.din_b(VDP2_RB0_D),
-	.wr_b(VDP2_RB0_WE|VDP2_RB1_WE),
-	.rd_b(VDP2_RB0_RD|VDP2_RB1_RD),
+	.addr_b0({VDP2_RB0_A[18:17],3'b0000,VDP2_RB0_A[16:1]}),
+	.addr_b1({                  3'b0000,VDP2_RB1_A[16:1]}),
+	.din_b(VDP2_RB_D),
+	.wr_b(VDP2_RB_WE),
+	.rd_b(VDP2_RB_RD),
 	.dout_b0(VDP2_RB0_Q),
 	.dout_b1(VDP2_RB1_Q),
 	
@@ -872,25 +953,6 @@ sdram2 sdram2
 `else
 
 `endif
-
-//spram #(17,8)	sndram_l
-//(
-//	.clock(clk_sys),
-//	.address(SCSP_RAM_A[17:1]),
-//	.data(SCSP_RAM_D[7:0]),
-//	.wren(SCSP_RAM_WE[0]),
-//	.q(SCSP_RAM_Q[7:0])
-//);
-//
-//spram #(17,8)	sndram_u
-//(
-//	.clock(clk_sys),
-//	.address(SCSP_RAM_A[17:1]),
-//	.data(SCSP_RAM_D[15:8]),
-//	.wren(SCSP_RAM_WE[1]),
-//	.q(SCSP_RAM_Q[15:8])
-//);
-
 
 
 wire PAL = status[7];
@@ -934,7 +996,7 @@ reg DCLK_OLD;
 always @(posedge CLK_VIDEO) DCLK_OLD <= DCLK;
 wire ce_pix = DCLK & ~DCLK_OLD;
 
-video_mixer #(.LINE_LENGTH(360), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
+video_mixer #(.LINE_LENGTH((352*2)+8), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 (
 	.*,
 
@@ -942,7 +1004,7 @@ video_mixer #(.LINE_LENGTH(360), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 	.ce_pix(ce_pix),
 	.ce_pix_out(CE_PIXEL),
 
-	.scanlines(0),
+	.scanlines(2'b00),
 	.scandoubler(~INTERLACE && (scale || forced_scandoubler)),
 	.hq2x(scale==1),
 
@@ -961,7 +1023,7 @@ video_mixer #(.LINE_LENGTH(360), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 
 
 //debug
-reg  [5:0] SCRN_EN = 6'b111111;
+reg  [6:0] SCRN_EN = 7'b1111111;
 reg  [1:0] SND_EN = 2'b11;
 reg        DBG_PAUSE = 0;
 reg        DBG_BREAK = 0;
@@ -992,17 +1054,17 @@ always @(posedge clk_sys) begin
 			'h00C: begin SCRN_EN[3] <= ~SCRN_EN[3]; end 	// F4
 			'h003: begin SCRN_EN[4] <= ~SCRN_EN[4]; end 	// F5
 			'h00B: begin SCRN_EN[5] <= ~SCRN_EN[5]; end 	// F6
-			'h083: begin SND_EN[0] <= ~SND_EN[0]; end 	// F7
-			'h00A: begin SND_EN[1] <= ~SND_EN[1]; end 	// F8
-			'h001: begin DBG_BREAK <= ~DBG_BREAK; end 	// F9
-			'h009: begin DBG_RUN <= 1; end 	// F10
-			'h078: begin  end 	// F11
+			'h083: begin SCRN_EN[6] <= ~SCRN_EN[6]; end 	// F7
+			'h00A: begin SND_EN[0] <= ~SND_EN[0]; end 	// F8
+			'h001: begin SND_EN[1] <= ~SND_EN[1]; end 	// F9
+			'h009: begin DBG_BREAK <= ~DBG_BREAK; end 	// F10
+			'h078: begin DBG_RUN <= 1; end 	// F11
 			'h177: begin DBG_PAUSE <= ~DBG_PAUSE; end 	// Pause
 			
-			'h016: begin H320_END_INC <= 1; end 	// 1
-			'h01E: begin H320_END_DEC <= 1; end 	// 2
-			'h026: begin H352_END_INC <= 1; end 	// 3
-			'h025: begin H352_END_DEC <= 1; end 	// 4
+			'h016: begin H320_END_DEC <= 1; end 	// 1
+			'h01E: begin H320_END_INC <= 1; end 	// 2
+			'h026: begin H352_END_DEC <= 1; end 	// 3
+			'h025: begin H352_END_INC <= 1; end 	// 4
 
 		endcase
 	end

@@ -9,7 +9,6 @@ set_global_assignment -name VHDL_FILE rtl/mlab.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sdram.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sdram2.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/ddram.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/cache_2way.sv
 set_global_assignment -name VERILOG_FILE rtl/hps_ext.v
 set_global_assignment -name VHDL_FILE rtl/CEGen.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/vdp1_fb.sv

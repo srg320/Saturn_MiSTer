@@ -12,8 +12,8 @@ module SH_regram (
 
 	input	  clock;
 	input	[31:0]  data;
-	input	[4:0]  rdaddress;
-	input	[4:0]  wraddress;
+	input	[3:0]  rdaddress;
+	input	[3:0]  wraddress;
 	input	  wren;
 	output	[31:0]  q;
 `ifndef ALTERA_RESERVED_QIS
@@ -55,7 +55,7 @@ module SH_regram (
 		altdpram_component.rdcontrol_reg = "UNREGISTERED",
 		altdpram_component.read_during_write_mode_mixed_ports = "CONSTRAINED_DONT_CARE",
 		altdpram_component.width = 32,
-		altdpram_component.widthad = 5,
+		altdpram_component.widthad = 4,
 		altdpram_component.width_byteena = 1,
 		altdpram_component.wraddress_aclr = "OFF",
 		altdpram_component.wraddress_reg = "INCLOCK",
