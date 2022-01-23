@@ -243,7 +243,7 @@ localparam CONF_STR = {
 
 	"-;",
 	"R0,Reset;",
-	"J1,A,B,C,Start,Mode,X,Y,Z;",
+	"J1,A,B,C,Start,R,X,Y,Z,L;",
 	"jn,A,B,R,Start,Select,X,Y,L;", 
 	"jp,Y,B,A,Start,Select,L,X,R;",
 	"V,v",`BUILD_DATE
@@ -378,8 +378,72 @@ pll pll
 	.rst(0),
 	.outclk_0(clk_sys),
 	.outclk_1(clk_ram),
+	.reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll), 
 	.locked(locked)
 );
+
+wire [63:0] reconfig_to_pll;
+wire [63:0] reconfig_from_pll;
+wire        cfg_waitrequest;
+reg         cfg_write;
+reg   [5:0] cfg_address;
+reg  [31:0] cfg_data;
+
+pll_cfg pll_cfg
+(
+	.mgmt_clk(CLK_50M),
+	.mgmt_reset(0),
+	.mgmt_waitrequest(cfg_waitrequest),
+	.mgmt_read(0),
+	.mgmt_readdata(),
+	.mgmt_write(cfg_write),
+	.mgmt_address(cfg_address),
+	.mgmt_writedata(cfg_data),
+	.reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll)
+);
+
+always @(posedge CLK_50M) begin
+//	reg pald = 0, pald2 = 0;
+	reg hres = 0, hres2 = 0;
+	reg [2:0] state = 0;
+
+//	pald  <= PAL;
+//	pald2 <= pald;
+	
+	hres  <= HRES[0];
+	hres2 <= hres;
+
+	cfg_write <= 0;
+	if (hres2 != hres) state <= 1;
+
+	if (!cfg_waitrequest) begin
+		if (state) state <= state + 1'd1;
+		case (state)
+			1: begin
+					cfg_address <= 0;
+					cfg_data <= 0;
+					cfg_write <= 1;
+				end
+			3: begin
+					cfg_address <= 4;
+					cfg_data <= !hres2 ? 32'h00000404 : 32'h00020504;
+					cfg_write <= 1;
+				end
+			5: begin
+					cfg_address <= 7;
+					cfg_data <= !hres2 ? 2532450157 : 702807747;
+					cfg_write <= 1;
+				end
+			7: begin
+					cfg_address <= 2;
+					cfg_data <= 0;
+					cfg_write <= 1;
+				end
+		endcase
+	end
+end 
 
 
 wire reset = RESET | status[0] | buttons[1];
@@ -469,13 +533,15 @@ wire        FIELD;
 wire        INTERLACE;
 wire  [1:0] HRES;
 wire  [1:0] VRES;
+wire        DCE;
 
+wire [31:0] in_clk = !HRES[0] ? 53685200 : 57272720;
 wire SCSP_CE;		//SCSP clock 22.5792MHz
 CEGen SCSP_CEGen
 (
 	.CLK(clk_sys),
 	.RST_N(1/*RST_N*/),
-	.IN_CLK(57272720),
+	.IN_CLK(in_clk),
 	.OUT_CLK(22579200),
 	.CE(SCSP_CE)
 );
@@ -485,7 +551,7 @@ CEGen CD_CEGen
 (
 	.CLK(clk_sys),
 	.RST_N(1/*RST_N*/),
-	.IN_CLK(57272720),
+	.IN_CLK(in_clk),
 	.OUT_CLK(20000000*2),
 	.CE(CD_CE)
 );
@@ -495,7 +561,7 @@ CEGen CDD_CEGen
 (
 	.CLK(clk_sys),
 	.RST_N(1/*RST_N*/),
-	.IN_CLK(57272720),
+	.IN_CLK(in_clk),
 	.OUT_CLK(44100*2*2),
 	.CE(CDD_2X_CE)
 );
@@ -596,6 +662,7 @@ Saturn saturn
 	.INTERLACE(INTERLACE),
 	.HRES(HRES), 				//[1]:0-normal,1-hi-res; [0]:0-320p,1-352p
 	.VRES(VRES), 				//0-224,1-240,2-256
+	.DCE(DCE),
 	
 	.SOUND_L(AUDIO_L),
 	.SOUND_R(AUDIO_R),
@@ -921,7 +988,7 @@ sdram2 sdram2
 	
 	.clk(clk_ram),
 	.init(~locked),
-	.sync(ce_pix),
+	.sync(DCE),
 
 	.addr_a0({VDP2_RA0_A[18:17],3'b0000,VDP2_RA0_A[16:1]}),
 	.addr_a1({                  3'b0000,VDP2_RA1_A[16:1]}),
@@ -992,8 +1059,12 @@ wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
 assign CLK_VIDEO = clk_ram;
 assign VGA_SL = {~INTERLACE,~INTERLACE} & sl[1:0];
 
+reg [7:0] RS,GS,BS;
 reg DCLK_OLD;
-always @(posedge CLK_VIDEO) DCLK_OLD <= DCLK;
+always @(posedge CLK_VIDEO) begin
+	{RS,GS,BS} <= {R,G,B};
+	DCLK_OLD <= DCLK;
+end
 wire ce_pix = DCLK & ~DCLK_OLD;
 
 video_mixer #(.LINE_LENGTH((352*2)+8), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
@@ -1010,9 +1081,9 @@ video_mixer #(.LINE_LENGTH((352*2)+8), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 
 	.mono(0),
 
-	.R(R),
-	.G(G),
-	.B(B),
+	.R(RS),
+	.G(GS),
+	.B(BS),
 
 	// Positive pulses.
 	.HSync(~HS_N),
