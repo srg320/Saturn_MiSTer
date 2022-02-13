@@ -1,5 +1,27 @@
+//
+// sdram.v
+//
+// sdram controller implementation
+// Copyright (c) 2018 Sorgelig
+// 
+// This source file is free software: you can redistribute it and/or modify 
+// it under the terms of the GNU General Public License as published 
+// by the Free Software Foundation, either version 3 of the License, or 
+// (at your option) any later version. 
+// 
+// This source file is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of 
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the 
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License 
+// along with this program.  If not, see <http://www.gnu.org/licenses/>. 
+//
+
 module sdram2
 (
+
+	// interface to the MT48LC16M16 chip
 	inout  reg [15:0] SDRAM_DQ,   // 16 bit bidirectional data bus
 	output reg [12:0] SDRAM_A,    // 13 bit multiplexed address bus
 	output reg        SDRAM_DQML, // byte mask
@@ -15,387 +37,248 @@ module sdram2
 	// cpu/chipset interface
 	input             init,			// init signal after FPGA config to initialize RAM
 	input             clk,			// sdram is accessed at up to 128MHz
-	input             sync,			//
 
-	input      [21:1] addr_a0,
-	input      [19:1] addr_a1,
-	input      [31:0] din_a,
-	input       [3:0] wr_a,
-	input             rd_a,
-	output     [31:0] dout_a0,
-	output     [31:0] dout_a1,
+	input      [24:1] addr0,
+	input             rd0,
+	input             wrl0,
+	input             wrh0,
+	input      [15:0] din0,
+	output reg [15:0] dout0,
+	output            busy0,
 	
-	input      [21:1] addr_b0,
-	input      [19:1] addr_b1,
-	input      [31:0] din_b,
-	input       [3:0] wr_b,
-	input             rd_b,
-	output     [31:0] dout_b0,
-	output     [31:0] dout_b1,
-
-	input      [21:1] ch2addr,
-	input      [15:0] ch2din,
-	input       [1:0] ch2wr,
-	input             ch2rd,
-	output     [31:0] ch2dout,
-	output reg        ch2ardy,
-	output reg        ch2drdy,
-
-	output [1:0] dbg_ctrl_bank,
-	output [1:0] dbg_ctrl_cmd,
-	output [3:0] dbg_ctrl_we,
-	output       dbg_ctrl_rfs,
+	input      [24:1] addr1,
+	input             rd1,
+	input             wrl1,
+	input             wrh1,
+	input      [15:0] din1,
+	output reg [15:0] dout1,
+	output            busy1,
 	
-	output       dbg_data0_read,
-	output       dbg_out0_read,
-	output [1:0] dbg_out0_bank,
-	
-	output       dbg_data1_read,
-	output       dbg_out1_read,
-	output [1:0] dbg_out1_bank
+	input      [24:1] addr2,
+	input             rd2,
+	input             wrl2,
+	input             wrh2,
+	input      [15:0] din2,
+	output reg [15:0] dout2,
+	output            busy2
 );
 
-	localparam RASCAS_DELAY   = 3'd2; // tRCD=20ns -> 2 cycles@85MHz
-	localparam BURST_LENGTH   = 3'd1; // 0=1, 1=2, 2=4, 3=8, 7=full page
-	localparam ACCESS_TYPE    = 1'd0; // 0=sequential, 1=interleaved
-	localparam CAS_LATENCY    = 3'd2; // 2/3 allowed
-	localparam OP_MODE        = 2'd0; // only 0 (standard operation) allowed
-	localparam NO_WRITE_BURST = 1'd1; // 0=write burst enabled, 1=only single access write
+assign SDRAM_nCS = 0;
+assign SDRAM_CKE = 1;
+assign {SDRAM_DQMH,SDRAM_DQML} = SDRAM_A[12:11];
 
-	localparam MODE = {3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_LENGTH}; 
+localparam RASCAS_DELAY   = 3'd2; // tRCD=20ns -> 2 cycles@85MHz
+localparam BURST_LENGTH   = 3'd0; // 0=1, 1=2, 2=4, 3=8, 7=full page
+localparam ACCESS_TYPE    = 1'd0; // 0=sequential, 1=interleaved
+localparam CAS_LATENCY    = 3'd2; // 2/3 allowed
+localparam OP_MODE        = 2'd0; // only 0 (standard operation) allowed
+localparam NO_WRITE_BURST = 1'd1; // 0=write burst enabled, 1=only single access write
+
+localparam MODE = { 3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_LENGTH}; 
+
+localparam STATE_IDLE  = 3'd0;             // state to check the requests
+localparam STATE_START = STATE_IDLE+1'd1;  // state in which a new command is started
+localparam STATE_CONT  = STATE_START+RASCAS_DELAY;
+localparam STATE_READY = STATE_CONT+CAS_LATENCY+1'd1;
+localparam STATE_LAST  = STATE_READY;      // last state in cycle
+
+reg  [2:0] state;
+reg [22:1] a;
+reg [15:0] data;
+reg        we;
+reg  [1:0] ba = '0;
+reg  [1:0] dqm;
+reg        active = 0;
+reg  [2:0] read_exec = '0,write_exec = '0;
+reg  [2:0] read_pend = '0,write_pend = '0;
+
+wire [2:0] wr = {wrl2|wrh2,wrl1|wrh1,wrl0|wrh0};
+wire [2:0] rd = {rd2,rd1,rd0};
+
+localparam [9:0] RFS_CNT = 766;
+
+// access manager
+always @(posedge clk) begin
+	reg  [9:0] rfs_timer = 0;
+	reg  [2:0] old_rd, old_wr;
+	reg [15:0] dout;
+	reg        data_out = 0;
+
+	old_rd <= old_rd & rd;
+	old_wr <= old_wr & wr;
+
+	if(rfs_timer) rfs_timer <= rfs_timer - 1'd1;
 	
-	localparam STATE_IDLE  = 3'd0;             // state to check the requests
-	localparam STATE_START = STATE_IDLE+1'd1;  // state in which a new command is started
-	localparam STATE_CONT  = STATE_START+RASCAS_DELAY;
-	localparam STATE_READY = STATE_CONT+CAS_LATENCY+1'd1;
-	localparam STATE_LAST  = STATE_READY;      // last state in cycle
+	if (~old_rd[0] && rd[0]) read_pend[0] <= 1;
+	if (~old_rd[1] && rd[1]) read_pend[1] <= 1;
+	if (~old_rd[2] && rd[2]) read_pend[2] <= 1;
+	if (~old_wr[0] && wr[0]) write_pend[0] <= 1;
+	if (~old_wr[1] && wr[1]) write_pend[1] <= 1;
+	if (~old_wr[2] && wr[2]) write_pend[2] <= 1;
 	
-	localparam MODE_NORMAL = 2'b00;
-	localparam MODE_RESET  = 2'b01;
-	localparam MODE_LDM    = 2'b10;
-	localparam MODE_PRE    = 2'b11;
-
-	// initialization 
-	reg [2:0] init_state = '0;
-	reg [1:0] mode;
-	reg       init_chip = 0;
-	reg       init_done = 0;
-	always @(posedge clk) begin
-		reg [4:0] reset = 5'h1f;
-		reg init_old = 0;
-		
-		if(mode != MODE_NORMAL || init_state != STATE_IDLE || reset) begin
-			init_state <= init_state + 1'd1;
-			if (init_state == STATE_LAST) init_state <= STATE_IDLE;
+	if(state == STATE_IDLE && mode == MODE_NORMAL) begin
+		if (!rfs_timer) begin
+			rfs_timer <= RFS_CNT;
+			active <= 0;
+			we <= 0;
+			dqm <= 0;
+			state <= STATE_START;
 		end
-
-		init_old <= init;
-		if (init_old & ~init) begin
-			reset <= 5'h1f; 
-			init_chip <= 0;
-			init_done <= 0;
+		else if ((~old_rd[0] && rd[0]) || write_pend[0] || read_pend[0]) begin
+			old_rd[0] <= rd[0];
+			old_wr[0] <= wr[0];
+			{ba, a} <= addr0;
+			data <= din0;
+			we <= wr[0];
+			dqm <= wr[0] ? ~{wrh0,wrl0} : 2'b00;
+			read_exec[0] <= rd[0] | read_pend[0];
+			write_exec[0] <= write_pend[0];
+			read_pend[0] <= 0; 
+			write_pend[0] <= 0;
+			active <= 1;
+			state <= STATE_START;
 		end
-		else if (init_state == STATE_LAST) begin
-			if(reset != 0) begin
-				reset <= reset - 5'd1;
-				if (reset == 15 || reset == 14) begin mode <= MODE_PRE; init_chip <= (reset == 15); end
-				else if(reset == 4 || reset == 3) begin mode <= MODE_LDM; init_chip <= (reset == 4); end
-				else                mode <= MODE_RESET;
-			end
-			else begin
-				mode <= MODE_NORMAL;
-				init_chip <= 0;
-				init_done <= 1;
-			end
+		else if ((~old_rd[1] && rd[1]) || write_pend[1] || read_pend[1]) begin
+			old_rd[1] <= rd[1];
+			old_wr[1] <= wr[1];
+			{ba, a} <= addr1;
+			data <= din1;
+			we <= wr[1];
+			dqm <= wr[1] ? ~{wrh1,wrl1} : 2'b00;
+			read_exec[1] <= rd[1] | read_pend[1];
+			write_exec[1] <= write_pend[1];
+			read_pend[1] <= 0; 
+			write_pend[1] <= 0;
+			active <= 1;
+			state <= STATE_START;
+		end
+		else if ((~old_rd[2] && rd[2]) || write_pend[2] || read_pend[2]) begin
+			old_rd[2] <= rd[2];
+			old_wr[2] <= wr[2];
+			{ba, a} <= addr2;
+			data <= din2;
+			we <= wr[2];
+			dqm <= wr[2] ? ~{wrh2,wrl2} : 2'b00;
+			read_exec[2] <= rd[2] | read_pend[2];
+			write_exec[2] <= write_pend[2];
+			read_pend[2] <= 0; 
+			write_pend[2] <= 0;
+			active <= 1;
+			state <= STATE_START;
 		end
 	end
+
+	data_out <= 0;
+	if(state == STATE_READY && active) begin
+		dout <= SDRAM_DQ;
+		data_out <= ~|write_exec;
+		if (write_exec[0]) write_exec[0] <= 0;
+		if (write_exec[1]) write_exec[1] <= 0;
+		if (write_exec[2]) write_exec[2] <= 0;
+		active <= 0;
+	end
+
+	if(mode != MODE_NORMAL || state != STATE_IDLE || reset) begin
+		state <= state + 1'd1;
+		if(state == STATE_LAST) state <= STATE_IDLE;
+	end
 	
-	localparam CTRL_IDLE = 2'd0;
-	localparam CTRL_RAS = 2'd1;
-	localparam CTRL_CAS = 2'd2;
-	
-	typedef struct packed
-	{
-		bit [ 1:0] CMD;	//command
-		bit        CHIP;	//chip n
-		bit [ 1:0] BANK;	//bank (chip 0)
-		bit        C2CH;	//
-		bit [19:1] ADDR;	//read/write address (chip 0)
-		bit [15:0] DATA;	//write data
-		bit        RD;		//read	
-		bit        WE;		//write enable
-		bit [ 1:0] BE;		//write byte enable
-		bit        RFS;	//refresh	
-	} state_t;
-	state_t state[6];
-	reg [ 3: 0] st_num;
-	
-	reg [19: 1] raddr0[2];
-	reg [19: 1] raddr1[2];
-	reg [21: 1] waddr[2];
-	reg [31: 0] din[2];
-	reg [ 3: 0] wr[2];
-	reg         rd[2];
-	reg [21: 1] addr2;
-	reg [15: 0] din2;
-	reg [ 1: 0] wr2;
-	reg         rd2;
-	reg         pend2;
-	
-	always @(posedge clk) begin
-		reg sync_old;
-		reg ch2rw_old_a,ch2rw_old_b;
-		
-		sync_old <= sync;
-		if (!init_done) begin
-			st_num <= 4'd0;
-			wr2 <= '0;
-			rd2 <= 0;
-			pend2 <= 0;
-			ch2ardy <= 0;
-			ch2drdy <= 0;
-		end else begin
-			st_num <= st_num + 4'd1;
-			if (!sync && sync_old) 
-				st_num <= 4'd7;
-			
-			//chip 1
-			if (st_num == 4'd15) begin
-				raddr0 <= '{addr_a0[19:1],addr_b0[19:1]};
-				raddr1 <= '{addr_a1[19:1],addr_b1[19:1]};
-				waddr <= '{addr_a0,addr_b0};
-				din <= '{din_a,din_b};
-				wr <= '{wr_a,wr_b};
-				rd <= '{rd_a & ~|wr_a,rd_b & ~|wr_b};
-			end
-			
-			//chip 2
-			if (st_num == 4'd3 || st_num == 4'd11) begin
-				addr2 <= ch2addr;
-				din2 <= ch2din;
-				wr2 <= ch2wr;
-				rd2 <= ch2rd & ~|ch2wr;
-				ch2ardy <= ch2rd | |ch2wr;
-				if (pend2) begin
-					pend2 <= 0;  
-					ch2drdy <= 1;
-				end
-			end else if (st_num == 4'd7 || st_num == 4'd15) begin
-				if (ch2ardy) begin
-					wr2 <= '0;
-					rd2 <= 0;
-					ch2ardy <= 0;
-					pend2 <= 1;
-				end
-				if (ch2drdy) begin
-					ch2drdy <= 0;
-				end
-			end
+	if (data_out) begin
+		if (read_exec[0]) begin dout0 <= dout; read_exec[0] <= 0; end
+		if (read_exec[1]) begin dout1 <= dout; read_exec[1] <= 0; end
+		if (read_exec[2]) begin dout2 <= dout; read_exec[2] <= 0; end
+	end
+end
+
+assign busy0 = write_pend[0] | read_pend[0] | read_exec[0];
+assign busy1 = write_pend[1] | read_pend[1] | read_exec[1];
+assign busy2 = write_pend[2] | read_pend[2] | read_exec[2];
+
+
+localparam MODE_NORMAL = 2'b00;
+localparam MODE_RESET  = 2'b01;
+localparam MODE_LDM    = 2'b10;
+localparam MODE_PRE    = 2'b11;
+
+// initialization 
+reg [1:0] mode;
+reg [4:0] reset=5'h1f;
+always @(posedge clk) begin
+	reg init_old=0;
+	init_old <= init;
+
+	if(init_old & ~init) reset <= 5'h1f;
+	else if(state == STATE_LAST) begin
+		if(reset != 0) begin
+			reset <= reset - 5'd1;
+			if(reset == 14)     mode <= MODE_PRE;
+			else if(reset == 3) mode <= MODE_LDM;
+			else                mode <= MODE_RESET;
 		end
-		
+		else mode <= MODE_NORMAL;
 	end
-	
-	always @(posedge clk) begin
-		state[0] <= '0;
-		if (!init_done) begin
-			state[0].CMD <= init_state == STATE_START ? CTRL_RAS : 
-			                init_state == STATE_CONT  ? CTRL_CAS : 
-								                             CTRL_IDLE;
-			state[0].RFS <= 1;
-		end else begin
-			case (st_num[2:0])
-				3'b000: begin state[0].CMD  <= rd[st_num[3]]                   ? CTRL_RAS          : CTRL_IDLE; 
-								  state[0].ADDR <=                                   raddr0[st_num[3]];
-								  state[0].BANK <=                                   {st_num[3],1'b0};
-				              state[0].CHIP <= 0; end
-								  
-//				3'b001: begin  end
+end
 
-				3'b010: begin state[0].CMD  <=                                   CTRL_RAS;
-								  state[0].ADDR <= rd[st_num[3]]                   ? raddr1[st_num[3]] : waddr[st_num[3]][19:1];
-								  state[0].WE   <= |wr[st_num[3]];
-								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b1}  : waddr[st_num[3]][21:20];
-								  state[0].RFS  <= ~|wr[st_num[3]] & ~rd[st_num[3]];
-				              state[0].CHIP <= 0; end
-								  
-				3'b011: begin state[0].CMD  <= rd[st_num[3]]                   ? CTRL_CAS          : CTRL_IDLE;
-								  state[0].ADDR <=                                   raddr0[st_num[3]];
-				              state[0].RD   <= rd[st_num[3]];
-								  state[0].BANK <=                                   {st_num[3],1'b0};
-				              state[0].CHIP <= 0; end
-								  
-//				3'b100: begin state[0].CMD  <=                                   CTRL_RAS;
-//								  state[0].RFS  <= ~|wr2 & ~rd2;
-//				              state[0].CHIP <= 1;                                                    
-//				              state[0].BANK <= addr2[21:20]; end
+localparam CMD_NOP             = 3'b111;
+localparam CMD_ACTIVE          = 3'b011;
+localparam CMD_READ            = 3'b101;
+localparam CMD_WRITE           = 3'b100;
+localparam CMD_BURST_TERMINATE = 3'b110;
+localparam CMD_PRECHARGE       = 3'b010;
+localparam CMD_AUTO_REFRESH    = 3'b001;
+localparam CMD_LOAD_MODE       = 3'b000;
 
-				3'b101: begin state[0].CMD  <= wr[st_num[3]] || rd[st_num[3]]  ? CTRL_CAS          : CTRL_IDLE;
-								  state[0].ADDR <= rd[st_num[3]]                   ? raddr1[st_num[3]] : {waddr[st_num[3]][19:2],1'b0};
-				              state[0].RD   <= rd[st_num[3]];
-								  state[0].DATA <= din[st_num[3]][31:16];
-								  state[0].WE   <= |wr[st_num[3]];
-								  state[0].BE   <= wr[st_num[3]][3:2];
-								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b1}  : waddr[st_num[3]][21:20];
-				              state[0].CHIP <= 0; end
-								  
-				/*3'b110: begin state[0].CMD <=  wr2                            ? CTRL_CAS         : CTRL_IDLE;
-								  state[0].WE    <=  wr2;
-				              state[0].CHIP  <= 1;
-				              state[0].BANK  <= addr2[21:20]; end*/
-								  
-				3'b110: begin state[0].CMD  <= wr[st_num[3]]                   ? CTRL_CAS          : CTRL_IDLE;
-								  state[0].ADDR <=                                                       {waddr[st_num[3]][19:2],1'b1};
-								  state[0].DATA <= din[st_num[3]][15:0];
-								  state[0].WE   <= |wr[st_num[3]];
-								  state[0].BE   <= wr[st_num[3]][1:0];
-								  state[0].BANK <=                                                      waddr[st_num[3]][21:20];
-				              state[0].CHIP <= 0; end
-								  
-//				3'b111: begin state[0].CMD  <= rd2                             ? CTRL_CAS          : CTRL_IDLE;
-//				              state[0].RD   <= rd2;
-//				              state[0].CHIP <= 1;
-//				              state[0].BANK <= addr2[21:20]; end
-				default:;
-			endcase
-			state[0].C2CH <= st_num[3];
-		end
-		state[1] <= state[0];
-		state[2] <= state[1];
-		state[3] <= state[2];
-		state[4] <= state[3];
-		state[5] <= state[4];
+// SDRAM state machines
+always @(posedge clk) begin
+	if(state == STATE_START) SDRAM_BA <= (mode == MODE_NORMAL) ? ba : 2'b00;
+
+	SDRAM_DQ <= 'Z;
+	casex({active,we,mode,state})
+		{2'bXX, MODE_NORMAL, STATE_START}: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= active ? CMD_ACTIVE : CMD_AUTO_REFRESH;
+		{2'b11, MODE_NORMAL, STATE_CONT }: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE, SDRAM_DQ} <= {CMD_WRITE, data};
+		{2'b10, MODE_NORMAL, STATE_CONT }: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_READ;
+
+		// init
+		{2'bXX,    MODE_LDM, STATE_START}: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_LOAD_MODE;
+		{2'bXX,    MODE_PRE, STATE_START}: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_PRECHARGE;
+
+		                          default: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} <= CMD_NOP;
+	endcase
+
+	if(mode == MODE_NORMAL) begin
+		casex(state)
+			STATE_START: SDRAM_A <= a[13:1];
+			STATE_CONT:  SDRAM_A <= {dqm, 2'b10, a[22:14]};
+		endcase;
 	end
-	
-	wire [ 1:0] ctrl_cmd   = state[0].CMD;
-	wire [19:1] ctrl_addr  = state[0].ADDR;
-	wire [15:0] ctrl_data  = state[0].DATA;
-//	wire        ctrl_rd    = state[0].RD;
-	wire        ctrl_we    = state[0].WE;
-	wire [ 1:0] ctrl_be    = state[0].BE;
-	wire [ 1:0] ctrl_bank  = state[0].BANK;
-	wire        ctrl_rfs   = state[0].RFS;
-	wire        ctrl_chip  = state[0].CHIP;
-	
-	wire       data0_read = state[3].RD;
-	wire       out0_read  = state[4].RD;
-	wire [1:0] out0_bank  = state[4].BANK;
-	wire       out0_chip  = state[4].CHIP;
-	
-	wire       data1_read = state[4].RD;
-	wire       out1_read  = state[5].RD;
-	wire [1:0] out1_bank  = state[5].BANK;
-	wire       out1_chip  = state[5].CHIP;
-	
-	(* ramstyle = "logic" *) reg [31:0] dout[5] = '{5{'1}};
-	always @(posedge clk) begin
-		reg [15:0] temp;
-		
-		if (data0_read || data1_read) temp <= SDRAM_DQ;
+	else if(mode == MODE_LDM && state == STATE_START) SDRAM_A <= MODE;
+	else if(mode == MODE_PRE && state == STATE_START) SDRAM_A <= 13'b0010000000000;
+	else SDRAM_A <= 0;
+end
 
-//		if (init) 
-//			dout <= '{5{'0}};
-//		else begin
-			if (out0_read && !out0_chip) dout[{1'b0,out0_bank}][31:16] <= temp;
-			if (out1_read && !out1_chip) dout[{1'b0,out1_bank}][15:0] <= temp;
-			if (out0_read && out0_chip) dout[4][31:16] <= temp;
-			if (out1_read && out1_chip) dout[4][15:0] <= temp;
-//		end
-	end
-		
-	assign {dout_a0,dout_a1,dout_b0,dout_b1} = {dout[0],dout[1],dout[2],dout[3]};
-	assign ch2dout = dout[4];
-	
-
-	localparam CMD_NOP             = 3'b111;
-	localparam CMD_ACTIVE          = 3'b011;
-	localparam CMD_READ            = 3'b101;
-	localparam CMD_WRITE           = 3'b100;
-	localparam CMD_BURST_TERMINATE = 3'b110;
-	localparam CMD_PRECHARGE       = 3'b010;
-	localparam CMD_AUTO_REFRESH    = 3'b001;
-	localparam CMD_LOAD_MODE       = 3'b000;
-	
-	// SDRAM state machines
-	wire [19:1] a = !ctrl_chip ? ctrl_addr : addr2[19:1];
-	wire [15:0] d = !ctrl_chip ? ctrl_data : din2;
-	wire        we = ctrl_we;
-	wire  [1:0] dqm = ~ctrl_be;
-	wire        a10 = ctrl_addr[1];
-	always @(posedge clk) begin
-		if (ctrl_cmd == CTRL_RAS || ctrl_cmd == CTRL_CAS) SDRAM_BA <= (mode == MODE_NORMAL) ? ctrl_bank : 2'b00;
-
-		casex({init_done,ctrl_rfs,we,mode,ctrl_cmd})
-			{3'bX0X, MODE_NORMAL, CTRL_RAS}: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE, SDRAM_nCS} <= {CMD_ACTIVE,ctrl_chip};
-			{3'bX1X, MODE_NORMAL, CTRL_RAS}: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE, SDRAM_nCS} <= {CMD_AUTO_REFRESH,ctrl_chip};
-			{3'b101, MODE_NORMAL, CTRL_CAS}: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE, SDRAM_nCS} <= {CMD_WRITE,ctrl_chip};
-			{3'b100, MODE_NORMAL, CTRL_CAS}: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE, SDRAM_nCS} <= {CMD_READ,ctrl_chip};
-
-			// init
-			{3'bXXX,    MODE_LDM, CTRL_RAS}: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE, SDRAM_nCS} <= {CMD_LOAD_MODE, init_chip};
-			{3'bXXX,    MODE_PRE, CTRL_RAS}: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE, SDRAM_nCS} <= {CMD_PRECHARGE, init_chip};
-
-										   default: {SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE, SDRAM_nCS} <= {CMD_NOP,1'b1};
-		endcase
-		
-		SDRAM_DQ <= 'Z;
-		casex({init_done,ctrl_rfs,we,mode,ctrl_cmd})
-			{3'b101, MODE_NORMAL, CTRL_CAS}: SDRAM_DQ <= d;
-										   default: ;
-		endcase
-
-		if (mode == MODE_NORMAL) begin
-			casex ({we,ctrl_cmd})
-				{1'bX,CTRL_RAS}: SDRAM_A <= {2'b00,a[19:9]};
-				{1'b0,CTRL_CAS}: SDRAM_A <= {2'b00,1'b1,2'b00,a[8:1]};
-				{1'b1,CTRL_CAS}: SDRAM_A <= {dqm  ,a10 ,2'b00,a[8:1]};
-//				default:  SDRAM_A <= '0;
-			endcase;
-		end
-		else if (mode == MODE_LDM && ctrl_cmd == CTRL_RAS) SDRAM_A <= MODE;
-		else if (mode == MODE_PRE && ctrl_cmd == CTRL_RAS) SDRAM_A <= 13'b0010000000000;
-		else SDRAM_A <= '0;
-	end
-	
-//	assign SDRAM_nCS = 0;
-	assign SDRAM_CKE = 1;
-	assign {SDRAM_DQMH,SDRAM_DQML} = SDRAM_A[12:11];
-	
-	
-	
-	assign dbg_ctrl_bank = ctrl_bank;
-	assign dbg_ctrl_cmd = ctrl_cmd;
-	assign dbg_ctrl_we = ctrl_we;
-	assign dbg_ctrl_rfs = ctrl_rfs;
-	assign dbg_data0_read = data0_read;
-	assign dbg_out0_read = out0_read;
-	assign dbg_out0_bank = out0_bank;
-	assign dbg_data1_read = data1_read;
-	assign dbg_out1_read = out1_read;
-	assign dbg_out1_bank = out1_bank;
-
-	altddio_out
-	#(
-		.extend_oe_disable("OFF"),
-		.intended_device_family("Cyclone V"),
-		.invert_output("OFF"),
-		.lpm_hint("UNUSED"),
-		.lpm_type("altddio_out"),
-		.oe_reg("UNREGISTERED"),
-		.power_up_high("OFF"),
-		.width(1)
-	)
-	sdramclk_ddr
-	(
-		.datain_h(1'b0),
-		.datain_l(1'b1),
-		.outclock(clk),
-		.dataout(SDRAM_CLK),
-		.aclr(1'b0),
-		.aset(1'b0),
-		.oe(1'b1),
-		.outclocken(1'b1),
-		.sclr(1'b0),
-		.sset(1'b0)
-	);
+altddio_out
+#(
+	.extend_oe_disable("OFF"),
+	.intended_device_family("Cyclone V"),
+	.invert_output("OFF"),
+	.lpm_hint("UNUSED"),
+	.lpm_type("altddio_out"),
+	.oe_reg("UNREGISTERED"),
+	.power_up_high("OFF"),
+	.width(1)
+)
+sdramclk_ddr
+(
+	.datain_h(1'b0),
+	.datain_l(1'b1),
+	.outclock(clk),
+	.dataout(SDRAM_CLK),
+	.aclr(1'b0),
+	.aset(1'b0),
+	.oe(1'b1),
+	.outclocken(1'b1),
+	.sclr(1'b0),
+	.sset(1'b0)
+);
 
 endmodule
