@@ -476,12 +476,12 @@ module emu
 	wire [17:1] VDP1_FB0_A;
 	wire [15:0] VDP1_FB0_D;
 	wire [15:0] VDP1_FB0_Q;
-	wire        VDP1_FB0_WE;
+	wire  [1:0] VDP1_FB0_WE;
 	wire        VDP1_FB0_RD;
 	wire [17:1] VDP1_FB1_A;
 	wire [15:0] VDP1_FB1_D;
 	wire [15:0] VDP1_FB1_Q;
-	wire        VDP1_FB1_WE;
+	wire  [1:0] VDP1_FB1_WE;
 	wire        VDP1_FB1_RD;
 	
 	wire [18:1] VDP2_RA0_A;
@@ -529,7 +529,7 @@ module emu
 	wire        INTERLACE;
 	wire  [1:0] HRES;
 	wire  [1:0] VRES;
-	wire        DCE;
+	wire        DCE_R;
 
 	wire [31:0] in_clk = !HRES[0] ? 53685200 : 57272720;
 	wire SCSP_CE;		//SCSP clock 22.5792MHz
@@ -601,6 +601,7 @@ module emu
 		.VDP1_FB1_WE(VDP1_FB1_WE),
 		.VDP1_FB1_RD(VDP1_FB1_RD),
 		.VDP1_FB1_Q(VDP1_FB1_Q),
+		.VDP1_FB_RDY(1),
 			
 		.VDP2_RA0_A(VDP2_RA0_A),
 		.VDP2_RA1_A(VDP2_RA1_A),
@@ -658,7 +659,7 @@ module emu
 		.INTERLACE(INTERLACE),
 		.HRES(HRES), 				//[1]:0-normal,1-hi-res; [0]:0-320p,1-352p
 		.VRES(VRES), 				//0-224,1-240,2-256
-		.DCE(DCE),
+		.DCE_R(DCE_R),
 		
 		.SOUND_L(AUDIO_L),
 		.SOUND_R(AUDIO_R),
@@ -818,7 +819,7 @@ module emu
 		
 		.clk(clk_ram),
 		.init(~locked),
-		.sync(DCE),
+		.sync(DCE_R),
 	
 		.addr_a0({VDP2_RA0_A[18:17],3'b0000,VDP2_RA0_A[16:1]}),
 		.addr_a1({                  3'b0000,VDP2_RA1_A[16:1]}),
@@ -1017,23 +1018,23 @@ module emu
 
 
 	//VDP1 FB
-	vdp1_fb vdp1_fb0
+	vdp1_fb_352x512x16 vdp1_fb0
 //	spiram #(17,16) vdp1_fb0
 	(
 		.clock(clk_sys),
 		.address({VDP1_FB0_A[9:1],VDP1_FB0_A[17:10]}),
 		.data(VDP1_FB0_D),
-		.wren({2{VDP1_FB0_WE}}),
+		.wren(VDP1_FB0_WE),
 		.q(VDP1_FB0_Q)
 	);
 
-	vdp1_fb vdp1_fb1
+	vdp1_fb_352x512x16 vdp1_fb1
 //	spiram #(17,16) vdp1_fb1
 	(
 		.clock(clk_sys),
 		.address({VDP1_FB1_A[9:1],VDP1_FB1_A[17:10]}),
 		.data(VDP1_FB1_D),
-		.wren({2{VDP1_FB1_WE}}),
+		.wren(VDP1_FB1_WE),
 		.q(VDP1_FB1_Q)
 	);
 
