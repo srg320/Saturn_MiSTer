@@ -69,6 +69,3 @@ set_location_assignment PIN_AG23 -to BTN_RESET
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to LED_*
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to BTN_*
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to BTN_*
-
-set_global_assignment -name SDC_FILE sys_analog.sdc
-

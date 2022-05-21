@@ -24,7 +24,7 @@ module emu
 	input         RESET,
 
 	//Must be passed to hps_io module
-	inout  [45:0] HPS_BUS,
+	inout  [48:0] HPS_BUS,
 
 	//Base video clock. Usually equals to CLK_SYS.
 	output        CLK_VIDEO,
@@ -34,8 +34,9 @@ module emu
 	output        CE_PIXEL,
 
 	//Video aspect ratio for HDMI. Most retro systems have ratio 4:3.
-	output  [7:0] VIDEO_ARX,
-	output  [7:0] VIDEO_ARY,
+	//if VIDEO_ARX[12] or VIDEO_ARY[12] is set then [11:0] contains scaled size instead of aspect ratio.
+	output [12:0] VIDEO_ARX,
+	output [12:0] VIDEO_ARY,
 
 	output  [7:0] VGA_R,
 	output  [7:0] VGA_G,
@@ -45,6 +46,40 @@ module emu
 	output        VGA_DE,    // = ~(VBlank | HBlank)
 	output        VGA_F1,
 	output [1:0]  VGA_SL,
+	output        VGA_SCALER, // Force VGA scaler
+
+	input  [11:0] HDMI_WIDTH,
+	input  [11:0] HDMI_HEIGHT,
+	output        HDMI_FREEZE,
+
+`ifdef MISTER_FB
+	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
+	// FB_FORMAT:
+	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
+	//    [3]   : 0=16bits 565 1=16bits 1555
+	//    [4]   : 0=RGB  1=BGR (for 16/24/32 modes)
+	//
+	// FB_STRIDE either 0 (rounded to 256 bytes) or multiple of pixel size (in bytes)
+	output        FB_EN,
+	output  [4:0] FB_FORMAT,
+	output [11:0] FB_WIDTH,
+	output [11:0] FB_HEIGHT,
+	output [31:0] FB_BASE,
+	output [13:0] FB_STRIDE,
+	input         FB_VBL,
+	input         FB_LL,
+	output        FB_FORCE_BLANK,
+
+`ifdef MISTER_FB_PALETTE
+	// Palette control for 8bit modes.
+	// Ignored for other video modes.
+	output        FB_PAL_CLK,
+	output  [7:0] FB_PAL_ADDR,
+	output [23:0] FB_PAL_DOUT,
+	input  [23:0] FB_PAL_DIN,
+	output        FB_PAL_WR,
+`endif
+`endif
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
 
@@ -59,9 +94,10 @@ module emu
 	// b[0]: osd button
 	output  [1:0] BUTTONS,
 
+	input         CLK_AUDIO, // 24.576 MHz
 	output [15:0] AUDIO_L,
 	output [15:0] AUDIO_R,
-	output        AUDIO_S, // 1 - signed audio samples, 0 - unsigned
+	output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
 	output  [1:0] AUDIO_MIX, // 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
 
 	//ADC
@@ -100,8 +136,9 @@ module emu
 	output        SDRAM_nRAS,
 	output        SDRAM_nWE,
 
-`ifdef DUAL_SDRAM
+`ifdef MISTER_DUAL_SDRAM
 	//Secondary SDRAM
+	//Set all output SDRAM_* signals to Z ASAP if SDRAM2_EN is 0
 	input         SDRAM2_EN,
 	output        SDRAM2_CLK,
 	output [12:0] SDRAM2_A,
@@ -183,10 +220,12 @@ module emu
 	
 	assign AUDIO_S = 1;
 	assign AUDIO_MIX = 0;
+	assign HDMI_FREEZE = 0;
 	
 	assign LED_DISK  = 0;
 	assign LED_POWER = 0;
-	assign LED_USER  = cart_download;
+	assign LED_USER  = bios_download;
+	assign VGA_SCALER= 0;
 
 
 	///////////////////////////////////////////////////
@@ -255,13 +294,13 @@ module emu
 	wire  [7:0] ioctl_index;
 	reg         ioctl_wait = 0;
 	
-	reg  [31:0] sd_lba;
+	reg  [31:0] sd_lba = '0;
 	reg         sd_rd = 0;
 	reg         sd_wr = 0;
 	wire        sd_ack;
 	wire  [7:0] sd_buff_addr;
 	wire [15:0] sd_buff_dout;
-	wire [15:0] sd_buff_din;
+	wire [15:0] sd_buff_din = '0;
 	wire        sd_buff_wr;
 	wire        img_mounted;
 	wire        img_readonly;
@@ -276,20 +315,18 @@ module emu
 	wire [21:0] gamma_bus;
 	wire [15:0] sdram_sz;
 	
-	hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1)) hps_io
+	hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
 	(
 		.clk_sys(clk_sys),
 		.HPS_BUS(HPS_BUS),
-	
-		.conf_str(CONF_STR),
 	
 		.joystick_0(joystick_0),
 		.joystick_1(joystick_1),
 		.joystick_2(joystick_2),
 		.joystick_3(joystick_3),
 		.joystick_4(joystick_4),
-		.joystick_analog_0({joy0_y, joy0_x}),
-		.joystick_analog_1({joy1_y, joy1_x}),
+		.joystick_l_analog_0({joy0_y, joy0_x}),
+		.joystick_l_analog_1({joy1_y, joy1_x}),
 	
 		.buttons(buttons),
 		.forced_scandoubler(forced_scandoubler),
@@ -307,13 +344,13 @@ module emu
 		.ioctl_dout(ioctl_data),
 		.ioctl_wait(ioctl_wait),
 	
-		.sd_lba(sd_lba),
+		.sd_lba('{sd_lba}),
 		.sd_rd(sd_rd),
 		.sd_wr(sd_wr),
 		.sd_ack(sd_ack),
 		.sd_buff_addr(sd_buff_addr),
 		.sd_buff_dout(sd_buff_dout),
-		.sd_buff_din(sd_buff_din),
+		.sd_buff_din('{sd_buff_din}),
 		.sd_buff_wr(sd_buff_wr),
 		.img_mounted(img_mounted),
 		.img_readonly(img_readonly),
@@ -329,7 +366,7 @@ module emu
 	
 	);
 	
-	reg  [1:0] region_req;
+	reg  [1:0] region_req = '0;
 	reg        region_set = 0;
 	
 	wire [96:0] cd_in;
@@ -342,7 +379,7 @@ module emu
 		.cd_out(cd_out)
 	);
 	
-	wire cart_download = ioctl_download & (ioctl_index[5:2] == 4'b0000);
+	wire bios_download = ioctl_download & (ioctl_index[5:2] == 4'b0000);
 	wire cdd_download = ioctl_download & (ioctl_index[5:2] == 4'b0001);//[0]:0=speed 1x,1=speed 2x; [1]:0=data,1=cdda;
 	
 	reg osd_btn = 0;
@@ -354,7 +391,7 @@ module emu
 //		if (RESET) last_rst = 0;
 //		if (status[0]) last_rst = 1;
 //	
-//		if (cart_download & ioctl_wr & status[0]) has_bootrom <= 1;
+//		if (bios_download & ioctl_wr & status[0]) has_bootrom <= 1;
 //	
 //		if(last_rst & ~status[0]) begin
 //			osd_btn <= 0;
@@ -441,7 +478,7 @@ module emu
 	end 
 	
 	
-	wire reset = RESET | status[0] | buttons[1];
+	wire reset = RESET | status[0] | buttons[1] | bios_download;
 	
 	wire  [3:0] area_code = status[51:49] == 3'd0 ? 4'h1 :	//Japan area
 									status[51:49] == 3'd1 ? 4'h2 :	//Asia NTSC area
@@ -564,7 +601,7 @@ module emu
 	
 	Saturn saturn
 	(
-		.RST_N(~(reset|cart_download)),
+		.RST_N(~reset),
 		.CLK(clk_sys),
 		.CE(1),
 		.EN(1),
@@ -818,7 +855,7 @@ module emu
 		.SDRAM_CKE(SDRAM_CKE),
 		
 		.clk(clk_ram),
-		.init(~locked),
+		.init(~locked | reset),
 		.sync(DCE_R),
 	
 		.addr_a0({VDP2_RA0_A[18:17],3'b0000,VDP2_RA0_A[16:1]}),
@@ -850,13 +887,13 @@ module emu
 		reg old_busy;
 		
 		old_busy <= ddr_busy[6];
-		if (cart_download && ioctl_addr[24:4] && !ioctl_addr[3:1] && ioctl_wr) ioctl_wait <= 1;
+		if (bios_download && ioctl_addr[24:4] && !ioctl_addr[3:1] && ioctl_wr) ioctl_wait <= 1;
 		if (~ddr_busy[6] && old_busy) ioctl_wait <= 0;
 	end
 
 	parameter bit [7:0] SRAM_INIT[16] = '{8'h42,8'h61,8'h63,8'h6B,8'h55,8'h70,8'h52,8'h61,8'h6D,8'h20,8'h46,8'h6F,8'h72,8'h6D,8'h61,8'h74};
 	wire [7:0] SRAM_INIT_DATA = !ioctl_addr[15:7] ? SRAM_INIT[ioctl_addr[4:1]] : 8'h00;
-	wire       SRAM_INIT_WE = cart_download & ~|ioctl_addr[18:16] & ioctl_wr;
+	wire       SRAM_INIT_WE = bios_download & ~|ioctl_addr[18:16] & ioctl_wr;
 	
 	wire [31:0] ddr_do[8];
 	wire        ddr_busy[8];
@@ -878,7 +915,7 @@ module emu
 		//CD RAM
 		.mem1_addr({ 9'b000010000,   CD_RAM_A[18:1]}          ),
 		.mem1_din ({16'h0000,CD_RAM_D}                        ),
-`ifdef DUAL_SDRAM
+`ifdef MISTER_DUAL_SDRAM
 		.mem1_wr  ('0                                         ),
 		.mem1_rd  (0                                          ),
 `else
@@ -933,7 +970,7 @@ module emu
 		//BIOS ROM
 		.mem6_addr({ 9'b000000000,ioctl_addr[18:1]}           ),
 		.mem6_din ({16'h0000,ioctl_data[7:0],ioctl_data[15:8]}),
-		.mem6_wr  ({2'b00,{2{cart_download & ioctl_wr}}}      ),
+		.mem6_wr  ({2'b00,{2{bios_download & ioctl_wr}}}      ),
 		.mem6_rd  (0                                          ),
 		.mem6_dout(ddr_do[6]                                  ),
 		.mem6_16b (1                                          ),
@@ -958,13 +995,13 @@ module emu
 												ddr_do[3];
 	assign MEM_WAIT_N = ~(ddr_busy[2] | ddr_busy[3] | ddr_busy[4]);
 
-`ifndef DUAL_SDRAM
+`ifndef MISTER_DUAL_SDRAM
 	assign CD_RAM_Q = ddr_do[1][15:0];
 	assign CD_RAM_RDY = ~ddr_busy[1];
 `endif
 
 
-`ifdef DUAL_SDRAM
+`ifdef MISTER_DUAL_SDRAM
 	//SDRAM2
 	wire sdr2_busy0, sdr2_busy1, sdr2_busy2;
 	wire [15:0] sdr2_do0,sdr2_do1,sdr2_do2;
@@ -1010,10 +1047,6 @@ module emu
 //	assign SCSP_RAM_RDY = ~sdr2_busy1;
 	assign CD_RAM_Q = sdr2_do0;
 	assign CD_RAM_RDY = ~sdr2_busy0;
-`else
-	assign {SDRAM2_CLK, SDRAM2_A, SDRAM2_BA} = '0;
-	assign SDRAM2_DQ = 'Z;
-	assign {SDRAM2_DQML, SDRAM2_DQMH, SDRAM2_nCS, SDRAM2_nCAS, SDRAM2_nRAS, SDRAM2_nWE} = '1;
 `endif
 
 
@@ -1039,14 +1072,14 @@ module emu
 	);
 
 
-	wire PAL = status[7];
+	wire PAL = (area_code >= 4'hA);//status[7];
 	
 	reg new_vmode;
 	always @(posedge clk_sys) begin
 		reg old_pal;
 		int to;
 		
-		if(~(reset | cart_download)) begin
+		if(!reset) begin
 			old_pal <= PAL;
 			if(old_pal != PAL) to <= 5000000;
 		end
@@ -1058,7 +1091,7 @@ module emu
 		end
 	end
 	
-	assign VGA_F1 = 0;
+	assign VGA_F1 = FIELD;
 	
 	//lock resolution for the whole frame.
 	reg [3:0] res = 4'b0000;
@@ -1076,10 +1109,10 @@ module emu
 	assign CLK_VIDEO = clk_ram;
 	assign VGA_SL = {~INTERLACE,~INTERLACE} & sl[1:0];
 	
-	reg [7:0] RS,GS,BS;
+//	reg [7:0] RS,GS,BS;
 	reg DCLK_OLD;
 	always @(posedge CLK_VIDEO) begin
-		{RS,GS,BS} <= {R,G,B};
+//		{RS,GS,BS} <= {R,G,B};
 		DCLK_OLD <= DCLK;
 	end
 	wire ce_pix = DCLK & ~DCLK_OLD;
@@ -1088,19 +1121,14 @@ module emu
 	(
 		.*,
 	
-		.clk_vid(CLK_VIDEO),
-		.ce_pix(ce_pix),
-		.ce_pix_out(CE_PIXEL),
-	
-		.scanlines(2'b00),
+		.ce_pix(ce_pix),	
 		.scandoubler(~INTERLACE && (scale || forced_scandoubler)),
-		.hq2x(scale==1),
+		.hq2x(scale==1),	
+		.freeze_sync(),
 	
-		.mono(0),
-	
-		.R(RS),
-		.G(GS),
-		.B(BS),
+		.R(R),
+		.G(G),
+		.B(B),
 	
 		// Positive pulses.
 		.HSync(~HS_N),

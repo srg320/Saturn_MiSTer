@@ -176,8 +176,8 @@ module sdram1
 			//chip 2
 			old_rd2 <= ch2rd;
 			old_wr2 <= |ch2wr;
-			if ( ch2rd && ~old_rd2) rd2_pend <= 1;
-			if (|ch2wr && ~old_wr2) wr2_pend <= 1;
+			if (ch2rd && !old_rd2) rd2_pend <= 1;
+			if (ch2wr && !old_wr2) wr2_pend <= 1;
 			
 			if (st_num[2:0] == 3'd7 && !rd2 && !wr2 && (rd2_pend || wr2_pend)) begin
 				addr2 <= ch2addr;
