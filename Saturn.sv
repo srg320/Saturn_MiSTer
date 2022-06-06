@@ -240,10 +240,9 @@ module emu
 	`include "build_id.v"
 	localparam CONF_STR = {
 		"Saturn;;",
-		"FS,BIN;",
 		"S0,CUE,Insert Disk;",
+		"FS,BIN;",
 		"-;",
-		"oK,Slave CPU enable,No,Yes;",
 		"oG,Time set,No,Yes;",
 		"oHJ,Region,Japan,Taiwan,USA,Brazil,Korea,Asia,Europe;",
 		"-;",
@@ -709,7 +708,6 @@ module emu
 		.DBG_PAUSE(DBG_PAUSE),
 		.DBG_BREAK(DBG_BREAK),
 		.DBG_RUN(DBG_RUN),
-		.SSH_EN(status[52]),
 		.H320_END_INC(H320_END_INC),
 		.H320_END_DEC(H320_END_DEC),
 		.H352_END_INC(H352_END_INC),
@@ -1052,7 +1050,6 @@ module emu
 
 	//VDP1 FB
 	vdp1_fb_352x512x16 vdp1_fb0
-//	spiram #(17,16) vdp1_fb0
 	(
 		.clock(clk_sys),
 		.address({VDP1_FB0_A[9:1],VDP1_FB0_A[17:10]}),
@@ -1062,7 +1059,6 @@ module emu
 	);
 
 	vdp1_fb_352x512x16 vdp1_fb1
-//	spiram #(17,16) vdp1_fb1
 	(
 		.clock(clk_sys),
 		.address({VDP1_FB1_A[9:1],VDP1_FB1_A[17:10]}),
