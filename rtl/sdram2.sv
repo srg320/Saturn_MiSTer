@@ -38,6 +38,8 @@ module sdram2
 	input             init,			// init signal after FPGA config to initialize RAM
 	input             clk,			// sdram is accessed at up to 128MHz
 
+	input             rfs,
+	
 	input      [24:1] addr0,
 	input             rd0,
 	input             wrl0,
@@ -91,6 +93,7 @@ reg  [1:0] dqm;
 reg        active = 0;
 reg  [2:0] read_exec = '0,write_exec = '0;
 reg  [2:0] read_pend = '0,write_pend = '0;
+reg        rfs_pend = 0;
 
 wire [2:0] wr = {wrl2|wrh2,wrl1|wrh1,wrl0|wrh0};
 wire [2:0] rd = {rd2,rd1,rd0};
@@ -101,69 +104,67 @@ localparam [9:0] RFS_CNT = 766;
 always @(posedge clk) begin
 	reg  [9:0] rfs_timer = 0;
 	reg  [2:0] old_rd, old_wr;
+	reg        old_rfs;
 	reg [15:0] dout;
 	reg        data_out = 0;
 
-	old_rd <= old_rd & rd;
-	old_wr <= old_wr & wr;
+	old_rd <= rd;
+	old_wr <= wr;
+	old_rfs <= rfs;
 
 	if(rfs_timer) rfs_timer <= rfs_timer - 1'd1;
 	
-	if (~old_rd[0] && rd[0]) read_pend[0] <= 1;
-	if (~old_rd[1] && rd[1]) read_pend[1] <= 1;
-	if (~old_rd[2] && rd[2]) read_pend[2] <= 1;
-	if (~old_wr[0] && wr[0]) write_pend[0] <= 1;
-	if (~old_wr[1] && wr[1]) write_pend[1] <= 1;
-	if (~old_wr[2] && wr[2]) write_pend[2] <= 1;
+	if (rd[0] && ~old_rd[0]) read_pend[0] <= 1;
+	if (rd[1] && ~old_rd[1]) read_pend[1] <= 1;
+	if (rd[2] && ~old_rd[2]) read_pend[2] <= 1;
+	if (wr[0] && ~old_wr[0]) write_pend[0] <= 1;
+	if (wr[1] && ~old_wr[1]) write_pend[1] <= 1;
+	if (wr[2] && ~old_wr[2]) write_pend[2] <= 1;
+	if (rfs && ~old_rfs) rfs_pend <= 1;
 	
 	if(state == STATE_IDLE && mode == MODE_NORMAL) begin
-		if (!rfs_timer) begin
+		if (/*(~old_rd[0] && rd[0]) ||*/ write_pend[0] || read_pend[0]) begin
+			{ba, a} <= addr0;
+			data <= din0;
+			we <= write_pend[0];
+			dqm <= write_pend[0] ? ~{wrh0,wrl0} : 2'b00;
+			read_exec[0] <= /*rd[0] |*/ read_pend[0];
+			write_exec[0] <= write_pend[0];
+			active <= 1;
+			read_pend[0] <= 0; 
+			write_pend[0] <= 0;
+			state <= STATE_START;
+		end
+		else if (/*(~old_rd[1] && rd[1]) ||*/ write_pend[1] || read_pend[1]) begin
+			{ba, a} <= addr1;
+			data <= din1;
+			we <= write_pend[1];
+			dqm <= write_pend[1] ? ~{wrh1,wrl1} : 2'b00;
+			read_exec[1] <= /*rd[1] |*/ read_pend[1];
+			write_exec[1] <= write_pend[1];
+			active <= 1;
+			read_pend[1] <= 0; 
+			write_pend[1] <= 0;
+			state <= STATE_START;
+		end
+		else if (/*(~old_rd[2] && rd[2]) ||*/ write_pend[2] || read_pend[2]) begin
+			{ba, a} <= addr2;
+			data <= din2;
+			we <= write_pend[2];
+			dqm <= write_pend[2] ? ~{wrh2,wrl2} : 2'b00;
+			read_exec[2] <= /*rd[2] |*/ read_pend[2];
+			write_exec[2] <= write_pend[2];
+			active <= 1;
+			read_pend[2] <= 0; 
+			write_pend[2] <= 0;
+			state <= STATE_START;
+		end
+		else if (!rfs_timer || rfs_pend) begin
 			rfs_timer <= RFS_CNT;
 			active <= 0;
 			we <= 0;
 			dqm <= 0;
-			state <= STATE_START;
-		end
-		else if ((~old_rd[0] && rd[0]) || write_pend[0] || read_pend[0]) begin
-			old_rd[0] <= rd[0];
-			old_wr[0] <= wr[0];
-			{ba, a} <= addr0;
-			data <= din0;
-			we <= wr[0];
-			dqm <= wr[0] ? ~{wrh0,wrl0} : 2'b00;
-			read_exec[0] <= rd[0] | read_pend[0];
-			write_exec[0] <= write_pend[0];
-			read_pend[0] <= 0; 
-			write_pend[0] <= 0;
-			active <= 1;
-			state <= STATE_START;
-		end
-		else if ((~old_rd[1] && rd[1]) || write_pend[1] || read_pend[1]) begin
-			old_rd[1] <= rd[1];
-			old_wr[1] <= wr[1];
-			{ba, a} <= addr1;
-			data <= din1;
-			we <= wr[1];
-			dqm <= wr[1] ? ~{wrh1,wrl1} : 2'b00;
-			read_exec[1] <= rd[1] | read_pend[1];
-			write_exec[1] <= write_pend[1];
-			read_pend[1] <= 0; 
-			write_pend[1] <= 0;
-			active <= 1;
-			state <= STATE_START;
-		end
-		else if ((~old_rd[2] && rd[2]) || write_pend[2] || read_pend[2]) begin
-			old_rd[2] <= rd[2];
-			old_wr[2] <= wr[2];
-			{ba, a} <= addr2;
-			data <= din2;
-			we <= wr[2];
-			dqm <= wr[2] ? ~{wrh2,wrl2} : 2'b00;
-			read_exec[2] <= rd[2] | read_pend[2];
-			write_exec[2] <= write_pend[2];
-			read_pend[2] <= 0; 
-			write_pend[2] <= 0;
-			active <= 1;
+			rfs_pend <= 0;
 			state <= STATE_START;
 		end
 	end
@@ -190,9 +191,9 @@ always @(posedge clk) begin
 	end
 end
 
-assign busy0 = write_pend[0] | read_pend[0] | read_exec[0];
-assign busy1 = write_pend[1] | read_pend[1] | read_exec[1];
-assign busy2 = write_pend[2] | read_pend[2] | read_exec[2];
+assign busy0 = write_pend[0] | read_pend[0] | read_exec[0] | write_exec[0];
+assign busy1 = write_pend[1] | read_pend[1] | read_exec[1] | write_exec[1];
+assign busy2 = write_pend[2] | read_pend[2] | read_exec[2] | write_exec[2];
 
 
 localparam MODE_NORMAL = 2'b00;

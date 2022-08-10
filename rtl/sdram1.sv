@@ -17,18 +17,18 @@ module sdram1
 	input             clk,			// sdram is accessed at up to 128MHz
 	input             sync,			//
 
-	input      [21:1] addr_a0,
+	input      [20:1] addr_a0,
 	input      [19:1] addr_a1,
-	input      [31:0] din_a,
-	input       [3:0] wr_a,
+	input      [63:0] din_a,
+	input       [7:0] wr_a,
 	input             rd_a,
 	output     [31:0] dout_a0,
 	output     [31:0] dout_a1,
 	
-	input      [21:1] addr_b0,
+	input      [20:1] addr_b0,
 	input      [19:1] addr_b1,
-	input      [31:0] din_b,
-	input       [3:0] wr_b,
+	input      [63:0] din_b,
+	input       [7:0] wr_b,
 	input             rd_b,
 	output     [31:0] dout_b0,
 	output     [31:0] dout_b1,
@@ -134,9 +134,9 @@ module sdram1
 	
 	reg [19: 1] raddr0[2];
 	reg [19: 1] raddr1[2];
-	reg [21: 1] waddr[2];
-	reg [31: 0] din[2];
-	reg [ 3: 0] wr[2];
+	reg [20: 1] waddr[2];
+	reg [63: 0] din[2];
+	reg [ 7: 0] wr[2];
 	reg         rd[2];
 	reg [21: 1] addr2;
 	reg [15: 0] din2;
@@ -219,7 +219,7 @@ module sdram1
 								  
 				3'b001: begin state[0].CMD  <= wr[st_num[3]] || rd[st_num[3]]  ? CTRL_RAS          : CTRL_IDLE;
 								  state[0].ADDR <= rd[st_num[3]]                   ? raddr0[st_num[3]] : waddr[st_num[3]][19:1];
-								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b0}  : waddr[st_num[3]][21:20];
+								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b0}  : {st_num[3],waddr[st_num[3]][20]};
 				              state[0].CHIP <= 0; end
 								  
 				3'b010: begin state[0].CMD  <= wr2 | rd2                       ? CTRL_CAS          : CTRL_IDLE;
@@ -232,27 +232,46 @@ module sdram1
 				              state[0].CHIP <= 1; end
 
 				3'b011: begin state[0].CMD  <= !wr[st_num[3]]                  ? CTRL_RAS          : CTRL_CAS;
-								  state[0].ADDR <= rd[st_num[3]]                   ? raddr1[st_num[3]] : {waddr[st_num[3]][19:2],1'b0};
-								  state[0].DATA <= din[st_num[3]][31:16];
+								  state[0].ADDR <= rd[st_num[3]]                   ? raddr1[st_num[3]] : {waddr[st_num[3]][19:3],2'b00};
+								  state[0].DATA <= din[st_num[3]][63:48];
 								  state[0].WE   <= |wr[st_num[3]];
-								  state[0].BE   <= wr[st_num[3]][3:2];
-								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b1}  : waddr[st_num[3]][21:20];
+								  state[0].BE   <= wr[st_num[3]][7:6];
+								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b1}  : {st_num[3],waddr[st_num[3]][20]};
 								  state[0].RFS  <= ~|wr[st_num[3]] & ~rd[st_num[3]];
 				              state[0].CHIP <= 0; end
 								  
-				3'b100: begin state[0].CMD  <= rd[st_num[3]]                   ? CTRL_CAS          : CTRL_IDLE;
+				3'b100: begin state[0].CMD  <= rd[st_num[3]]                   ? CTRL_CAS                                            : CTRL_IDLE;
 								  state[0].ADDR <=                                   raddr0[st_num[3]];
 				              state[0].RD   <= rd[st_num[3]];
 								  state[0].BANK <=                                  {st_num[3],1'b0};
 				              state[0].CHIP <= 0; end
 
-				3'b110: begin state[0].CMD  <= wr[st_num[3]] || rd[st_num[3]]  ? CTRL_CAS          : CTRL_IDLE;
-								  state[0].ADDR <= rd[st_num[3]]                   ? raddr1[st_num[3]] : {waddr[st_num[3]][19:2],1'b1};
+				3'b101: begin state[0].CMD  <= wr[st_num[3]]                                       ? CTRL_CAS                        : CTRL_IDLE;
+								  state[0].ADDR <=                                                       {waddr[st_num[3]][19:3],2'b01};
+				              state[0].RD   <= 0;
+								  state[0].DATA <= din[st_num[3]][47:32];
+								  state[0].WE   <= |wr[st_num[3]];
+								  state[0].BE   <= wr[st_num[3]][5:4];
+								  state[0].BANK <=                                                       {st_num[3],waddr[st_num[3]][20]};
+				              state[0].CHIP <= 0; end
+
+				3'b110: begin state[0].CMD  <= rd[st_num[3]]                   ? CTRL_CAS          : 
+				                               wr[st_num[3]]                                       ? CTRL_CAS                        : CTRL_IDLE;
+								  state[0].ADDR <= rd[st_num[3]]                   ? raddr1[st_num[3]] : {waddr[st_num[3]][19:3],2'b10};
 				              state[0].RD   <= rd[st_num[3]];
+								  state[0].DATA <= din[st_num[3]][31:16];
+								  state[0].WE   <= |wr[st_num[3]];
+								  state[0].BE   <= wr[st_num[3]][3:2];
+								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b1}  : {st_num[3],waddr[st_num[3]][20]};
+				              state[0].CHIP <= 0; end
+
+				3'b111: begin state[0].CMD  <= wr[st_num[3]]                                       ? CTRL_CAS                        : CTRL_IDLE;
+								  state[0].ADDR <=                                                       {waddr[st_num[3]][19:3],2'b11};
+				              state[0].RD   <= 0;
 								  state[0].DATA <= din[st_num[3]][15:0];
 								  state[0].WE   <= |wr[st_num[3]];
 								  state[0].BE   <= wr[st_num[3]][1:0];
-								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b1}  : waddr[st_num[3]][21:20];
+								  state[0].BANK <=                                                       {st_num[3],waddr[st_num[3]][20]};
 				              state[0].CHIP <= 0; end
 				default:;
 			endcase
@@ -315,7 +334,7 @@ module sdram1
 	wire        we = ctrl_we;
 	wire  [1:0] dqm = ~ctrl_be;
 	wire        ra10 = 1;
-	wire        wa10 = ctrl_addr[1] | ctrl_chip;
+	wire        wa10 = &ctrl_addr[2:1] | ctrl_chip;
 	always @(posedge clk) begin
 		if (ctrl_cmd == CTRL_RAS || ctrl_cmd == CTRL_CAS) SDRAM_BA <= (mode == MODE_NORMAL) ? ctrl_bank : 2'b00;
 

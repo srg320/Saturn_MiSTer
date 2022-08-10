@@ -520,17 +520,17 @@ module emu
 	wire  [1:0] VDP1_FB1_WE;
 	wire        VDP1_FB1_RD;
 	
-	wire [18:1] VDP2_RA0_A;
+	wire [17:1] VDP2_RA0_A;
 	wire [16:1] VDP2_RA1_A;
-	wire [31:0] VDP2_RA_D;
-	wire  [3:0] VDP2_RA_WE;
+	wire [63:0] VDP2_RA_D;
+	wire  [7:0] VDP2_RA_WE;
 	wire        VDP2_RA_RD;
 	wire [31:0] VDP2_RA0_Q;
 	wire [31:0] VDP2_RA1_Q;
-	wire [18:1] VDP2_RB0_A;
+	wire [17:1] VDP2_RB0_A;
 	wire [16:1] VDP2_RB1_A;
-	wire [31:0] VDP2_RB_D;
-	wire  [3:0] VDP2_RB_WE;
+	wire [63:0] VDP2_RB_D;
+	wire  [7:0] VDP2_RB_WE;
 	wire        VDP2_RB_RD;
 	wire [31:0] VDP2_RB0_Q;
 	wire [31:0] VDP2_RB1_Q;
@@ -541,6 +541,7 @@ module emu
 	wire        SCSP_RAM_RD;
 	wire        SCSP_RAM_CS;
 	wire [15:0] SCSP_RAM_Q;
+	wire        SCSP_RAM_RFS;
 	wire        SCSP_RAM_RDY;
 	
 	reg         CD_CDATA = 0;
@@ -661,6 +662,7 @@ module emu
 		.SCSP_RAM_RD(SCSP_RAM_RD),
 		.SCSP_RAM_CS(SCSP_RAM_CS),
 		.SCSP_RAM_Q(SCSP_RAM_Q),
+		.SCSP_RAM_RFS(SCSP_RAM_RFS),
 		.SCSP_RAM_RDY(SCSP_RAM_RDY),
 		
 		.CD_CE(CD_CE),
@@ -672,8 +674,6 @@ module emu
 		.CD_COMSYNC_N(CD_COMSYNC_N),
 		.CD_D(cdc_d),
 		.CD_CK(cdc_wr),
-		.CD_SPEED(cdc_speed),
-		.CD_AUDIO(cdc_audio),
 		.CD_RAM_A(CD_RAM_A),
 		.CD_RAM_D(CD_RAM_D),
 		.CD_RAM_WE(CD_RAM_WE),
@@ -733,11 +733,13 @@ module emu
 			cdd_trans_start <= 0;
 		
 		if (cdd_comm_rdy) begin
-			cd_in96 <= ~cd_in96;
+			cd_in[95:0] <= {HOST_COMM[11],HOST_COMM[10],HOST_COMM[9],HOST_COMM[8],HOST_COMM[7],HOST_COMM[6],HOST_COMM[5],HOST_COMM[4],HOST_COMM[3],HOST_COMM[2],HOST_COMM[1],HOST_COMM[0]};
+			cd_in[96] <= ~cd_in[96];
+//			cd_in96 <= ~cd_in96;
 		end
 	
 	end
-	assign cd_in = {cd_in96,HOST_COMM[11],HOST_COMM[10],HOST_COMM[9],HOST_COMM[8],HOST_COMM[7],HOST_COMM[6],HOST_COMM[5],HOST_COMM[4],HOST_COMM[3],HOST_COMM[2],HOST_COMM[1],HOST_COMM[0]};
+//	assign cd_in = {cd_in96,HOST_COMM[11],HOST_COMM[10],HOST_COMM[9],HOST_COMM[8],HOST_COMM[7],HOST_COMM[6],HOST_COMM[5],HOST_COMM[4],HOST_COMM[3],HOST_COMM[2],HOST_COMM[1],HOST_COMM[0]};
 			
 	reg [7:0] HOST_DATA = '0;
 	reg [7:0] CDD_DATA = '0;
@@ -804,7 +806,7 @@ module emu
 	end
 	
 	
-	reg [15:0] cdc_d;
+	reg [17:0] cdc_d;
 	reg        cdc_wr;
 	reg        cdc_speed;
 	reg        cdc_audio;
@@ -821,9 +823,9 @@ module emu
 			1: if (!cdd_download) begin
 				state <= 0;
 			end else if (cdd_download && ioctl_wr) begin
-				cnt <= 3;
+				cnt <= 0;
 				cdc_wr <= 1;
-				cdc_d[15:0] <= {ioctl_data[7:0],ioctl_data[15:8]};
+				cdc_d[17:0] <= {cdc_audio,cdc_speed,ioctl_data[7:0],ioctl_data[15:8]};
 				state <= 2;
 			end
 			
@@ -853,20 +855,20 @@ module emu
 		.SDRAM_CKE(SDRAM_CKE),
 		
 		.clk(clk_ram),
-		.init(~locked | reset),
+		.init(reset),
 		.sync(DCE_R),
 	
-		.addr_a0({VDP2_RA0_A[18:17],3'b0000,VDP2_RA0_A[16:1]}),
-		.addr_a1({                  3'b0000,VDP2_RA1_A[16:1]}),
+		.addr_a0({VDP2_RA0_A[17],3'b0000,VDP2_RA0_A[16:1]}),
+		.addr_a1({               3'b0000,VDP2_RA1_A[16:1]}),
 		.din_a(VDP2_RA_D),
 		.wr_a(VDP2_RA_WE),
 		.rd_a(VDP2_RA_RD),
 		.dout_a0(VDP2_RA0_Q),
 		.dout_a1(VDP2_RA1_Q),
 	
-		.addr_b0({VDP2_RB0_A[18:17],3'b0000,VDP2_RB0_A[16:1]}),
-		.addr_b1({                  3'b0000,VDP2_RB1_A[16:1]}),
-		.din_b(VDP2_RB_D),
+		.addr_b0({VDP2_RB0_A[17],3'b0000,VDP2_RB0_A[16:1]}),
+		.addr_b1({               3'b0000,VDP2_RB1_A[16:1]}),
+		.din_b(VDP2_RA_D),///////////////
 		.wr_b(VDP2_RB_WE),
 		.rd_b(VDP2_RB_RD),
 		.dout_b0(VDP2_RB0_Q),
@@ -1014,23 +1016,25 @@ module emu
 		.SDRAM_nRAS(SDRAM2_nRAS),
 		.SDRAM_nCAS(SDRAM2_nCAS),
 		
-		.init(~locked),
+		.init(reset),
 		.clk(clk_ram),
 
-		.addr0({6'b000000,CD_RAM_A[18:1]}),
-		.din0(CD_RAM_D),
+		.rfs(0/*SCSP_RAM_RFS*/),
+		
+		.addr0({6'b000001,SCSP_RAM_A[18:1]}),
+		.din0(SCSP_RAM_D),
 		.dout0(sdr2_do0),
-		.rd0(CD_RAM_RD & CD_RAM_CS),
-		.wrl0(CD_RAM_WE[0] & CD_RAM_CS),
-		.wrh0(CD_RAM_WE[1] & CD_RAM_CS),
+		.rd0(0/*SCSP_RAM_RD & SCSP_RAM_CS*/),
+		.wrl0(0/*SCSP_RAM_WE[0] & SCSP_RAM_CS*/),
+		.wrh0(0/*SCSP_RAM_WE[1] & SCSP_RAM_CS*/),
 		.busy0(sdr2_busy0),
 
-		.addr1({6'b000001,SCSP_RAM_A[18:1]}),
-		.din1(SCSP_RAM_D),
+		.addr1({6'b000000,CD_RAM_A[18:1]}),
+		.din1(CD_RAM_D),
 		.dout1(sdr2_do1),
-		.rd1(0/*SCSP_RAM_RD & SCSP_RAM_CS*/),
-		.wrl1(0/*SCSP_RAM_WE[0] & SCSP_RAM_CS*/),
-		.wrh1(0/*SCSP_RAM_WE[1] & SCSP_RAM_CS*/),
+		.rd1(CD_RAM_RD & CD_RAM_CS),
+		.wrl1(CD_RAM_WE[0] & CD_RAM_CS),
+		.wrh1(CD_RAM_WE[1] & CD_RAM_CS),
 		.busy1(sdr2_busy1),
 
 		.addr2({6'b000010,VDP1_VRAM_A[18:1]}),
@@ -1041,10 +1045,10 @@ module emu
 		.wrh2(0/*VDP1_VRAM_WE[1]*/),
 		.busy2(sdr2_busy2)
 	);
-//	assign SCSP_RAM_Q = sdr2_do1;
-//	assign SCSP_RAM_RDY = ~sdr2_busy1;
-	assign CD_RAM_Q = sdr2_do0;
-	assign CD_RAM_RDY = ~sdr2_busy0;
+//	assign SCSP_RAM_Q = sdr2_do0;
+//	assign SCSP_RAM_RDY = ~sdr2_busy0;
+	assign CD_RAM_Q = sdr2_do1;
+	assign CD_RAM_RDY = ~sdr2_busy1;
 `endif
 
 
