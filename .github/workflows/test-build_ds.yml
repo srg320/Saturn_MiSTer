@@ -1,0 +1,45 @@
+name: Test Build (Dual SDRAM)
+
+on: [push, workflow_dispatch]
+
+jobs:
+  synthesis:
+    runs-on: ubuntu-latest
+    container: raetro/quartus:17.0
+    steps:
+      # 1 - Checkout Project
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          path: project
+      # 2 - Checkout SH-2
+      - name: Checkout SH-2
+        uses: actions/checkout@v3
+        with:
+          repository: srg320/SH
+          path: SH
+      # 3 - Checkout Saturn
+      - name: Checkout Saturn
+        uses: actions/checkout@v3
+        with:
+          repository: srg320/Saturn
+          path: Saturn
+      # 4 - RTL synthesis Dual SDRAM
+      - name: Run compilation flow for Dual SDRAM
+        run: quartus_sh --flow compile project/Saturn_DS.qpf
+      # 5 - Get current version for tagging
+      - name: Get the version
+        id: version
+        run: echo "::set-output name=version::$(date +'%Y%m%d')"
+      # 6 - Copy Artifacts
+      - name: Create a copy and tag with version
+        run: |
+          mkdir -p release
+          cp project/output_files/Saturn_DS.rbf release/Saturn_DS_${{ steps.version.outputs.version }}.rbf
+          cp project/output_files/Saturn_DS.fit.summary release/Saturn_DS.fit_${{ steps.version.outputs.version }}.txt
+      # 7 - Upload artifacts
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: Saturn_DS_${{ steps.version.outputs.version }}
+          path: release/
