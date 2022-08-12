@@ -1,0 +1,82 @@
+################################################################################
+# SPDX-License-Identifier: CC0-1.0
+# SPDX-FileType: OTHER
+# SPDX-FileCopyrightText: (c) 2021-2022, The Raetro authors and contributors
+################################################################################
+name: Release (Single and Dual SDRAM)
+################################################################################
+# How to create a tag to launch the workflow
+# git tag 20221231
+# git push origin --tags
+################################################################################
+on:
+  push:
+    tags:
+      - '*' # Trigger only when tagged, i.e. 20221231
+################################################################################
+jobs:
+  synthesis:
+    runs-on: ubuntu-latest
+    container: raetro/quartus:17.0
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      # 1 - Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      # 2 - Checkout SH-2
+      - name: Checkout SH-2
+        uses: actions/checkout@v3
+        with:
+          repository: srg320/SH
+          path: SH
+      # 3 - Checkout Saturn
+      - name: Checkout Saturn
+        uses: actions/checkout@v3
+        with:
+          repository: srg320/Saturn
+          path: Saturn
+      # 4 - Change Path to Required Projects
+      - name: Fix files.qip paths
+        run: |
+          sed -i 's/..\/SH\//SH\//g' files.qip
+          sed -i 's/..\/Saturn\//Saturn\//g' files.qip
+      # 5 - RTL synthesis Single SDRAM
+      - name: Run compilation flow for Single SDRAM
+        run: quartus_sh --flow compile Saturn.qpf
+      # 6 - RTL synthesis Dual SDRAM
+      - name: Run compilation flow for Dual SDRAM
+        run: quartus_sh --flow compile Saturn_DS.qpf
+      # 7 - Get current version for tagging binary
+      - name: Get the version
+        id: version
+        run: echo ::set-output name=version::${GITHUB_REF#refs/tags/} # Get the version from the tag
+      # 8 - Create tag with version and SHA256 checksum
+      - name: Copy, tag with version and create SHA256 checksum
+        run: |
+          mkdir -p releases
+          cp output_files/Saturn.rbf releases/Saturn_${{ steps.version.outputs.version }}.rbf
+          cp output_files/Saturn_DS.rbf releases/Saturn_DS_${{ steps.version.outputs.version }}.rbf
+          ( cd output_files && sha256sum Saturn.rbf > ../releases/Saturn_${{ steps.version.outputs.version }}.rbf.sha256 )
+          ( cd output_files && sha256sum Saturn_DS.rbf > ../releases/Saturn_DS_${{ steps.version.outputs.version }}.rbf.sha256 )
+      # 9 - Create a new GitHub release and upload the distribution artifacts
+      - name: Create a new GitHub release
+        uses: softprops/action-gh-release@v0.1.14
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            releases/Saturn_${{ steps.version.outputs.version }}.rbf
+            releases/Saturn_${{ steps.version.outputs.version }}.rbf.sha256
+            releases/Saturn_DS_${{ steps.version.outputs.version }}.rbf
+            releases/Saturn_DS_${{ steps.version.outputs.version }}.rbf.sha256
+      # 9 - Commit Binary to Repository (aka. the MiST(er) way)
+      #- name: Commit release back to repository
+      #  run: |
+      #    git fetch
+      #    git checkout -b master
+      #    git config user.name github-actions
+      #    git config user.email github-actions@github.com
+      #    git add releases/Saturn_${{ steps.version.outputs.version }}.rbf
+      #    git add releases/Saturn_DS_${{ steps.version.outputs.version }}.rbf
+      #    git commit -m "Release ${{ steps.version.outputs.version }}"
+      #    git push origin master
