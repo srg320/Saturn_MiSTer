@@ -1,0 +1,29 @@
+################################################################################
+# SPDX-License-Identifier: CC0-1.0
+# SPDX-FileType: OTHER
+# SPDX-FileCopyrightText: (c) 2021, The Raetro authors and contributors
+################################################################################
+name: "Question"
+description: "Ask a question about the project."
+title: 'Title of your Question'
+labels:
+  - question
+assignees:
+  - srg320
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hi there,
+
+        Please note that we try to keep the issue tracker reserved for bug reports.
+        Make sure to [search for existing questions](https://github.com/srg320/Saturn_MiSTer/issues?q=label%3Aquestion) before filing a new one!
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Ask a question about the Sega Saturn Compatible FPGA Core
+      placeholder: |
+        Ask your question here! Please keep the questions related to the FPGA Core only.
+    validations:
+      required: true
