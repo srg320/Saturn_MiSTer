@@ -1,0 +1,116 @@
+################################################################################
+# SPDX-License-Identifier: CC0-1.0
+# SPDX-FileType: OTHER
+# SPDX-FileCopyrightText: (c) 2021-2022, The Raetro authors and contributors
+################################################################################
+name: "Bug Report"
+description: "Let us know about an unexpected error, a crash, or an incorrect behavior."
+title: 'Title of your Bug Report'
+labels:
+  - bug
+assignees:
+  - srg320
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hi there,
+
+        Thank you for opening an issue. Please note that we try to keep the issue tracker reserved for bug reports.
+        Make sure to [search for existing issues](https://github.com/srg320/Saturn_MiSTer/issues?q=label%3Abug) before filing a new one!
+
+  - type: input
+    id: version
+    attributes:
+      label: Version (or build number)
+      placeholder: "20220811"
+      description: |
+        You can find the version in the about dialog.
+
+        If you are not running the latest version, please try upgrading because your issue may have already been fixed.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: fpga
+    attributes:
+      label: Single or Dual SDRAM?
+      multiple: false
+      options:
+        - Single (128MB)
+        - Dual (128MB + 32MB)
+        - Dual (128MB + 64MB)
+        - Dual (128MB + 128MB)
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Please list the full steps required to reproduce the issue
+      placeholder: |
+        1. map joystick
+        2. change region
+        3. load game X
+        4. start game X
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected Behavior
+      description: If you want to include screenshots, paste them into the markdown editor below or follow up with a separate comment.
+      placeholder: What were you expecting?
+    validations:
+      required: false
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: Actual Behavior
+      placeholder: What happened instead?
+    validations:
+      required: true
+
+  - type: input
+    id: logs
+    attributes:
+      label: Debug Output/Crash Output
+      description: |
+        Full debug output can be obtained with UART.
+        Please create a GitHub Gist containing the debug output. Please do _not_ paste the debug output in the issue, since debug output is long.
+        Share a link to a GitHub Gist containing the output of the `crash.log` file.
+      placeholder: |
+        https://gist.github.com/myuser/e6cb69a18488cbd420d5bafdd6bf0ba
+    validations:
+      required: false
+
+  - type: textarea
+    id: bug_context
+    attributes:
+      label: Additional Context
+      description: |
+        Are there anything atypical about your situation that we should know?
+        For example: Running on an unsupported device? Are you passing any unusual command line options?
+    validations:
+      required: false
+
+  - type: textarea
+    id: bug_config_file
+    attributes:
+      label: Configuration Files
+      placeholder: |
+        Paste the relevant parts of your `.ini` configuration file.
+    validations:
+      required: false
+
+  - type: input
+    id: bug_firmware
+    attributes:
+      label: Opened Issues and Pull Requests
+      placeholder: "#1234"
+      description: |
+        Are there any other GitHub issues (open or closed) or Pull Requests that should be linked here? For example: #1234
+    validations:
+      required: false
