@@ -4,6 +4,7 @@
 [![Test Build (Single SDRAM)](https://github.com/srg320/Saturn_MiSTer/actions/workflows/test-build.yml/badge.svg?branch=master&event=push)](https://github.com/srg320/Saturn_MiSTer/actions/workflows/test-build.yml)
 [![Test Build (Dual SDRAM)](https://github.com/srg320/Saturn_MiSTer/actions/workflows/test-build_ds.yml/badge.svg?branch=master&event=push)](https://github.com/srg320/Saturn_MiSTer/actions/workflows/test-build_ds.yml)
 [![Funding](https://img.shields.io/endpoint?url=https://shieldsio-patreon.vercel.app/api/?username=srg320&type=patrons)](https://www.patreon.com/srg320)
+[![Funding](https://img.shields.io/badge/paypal-donate-blue.svg)](https://www.paypal.com/donate/?hosted_button_id=RCF2BEEN4V75L)
 [![Twitter Follow](https://img.shields.io/twitter/follow/srg320_?style=social)](https://twitter.com/srg320_)
 
 > **WARNING**: This repository is in active development. There are no guarantees about stability. Breaking changes will occur until a stable release is made and announced.
