@@ -719,25 +719,35 @@ module emu
 	reg       cdd_trans_start = 0;
 	reg [3:0] cdd_trans_wait = '0;
 	reg       cd_in96 = 0;
+	reg [7:0] cmd06_cnt;
+	reg [7:0] cmd09_cnt;
 	always @(posedge clk_sys) begin
 		reg cd_out96_last = 1;
 	
+		cdd_trans_start <= 0;
 		if (cd_out[96] != cd_out96_last)  begin
 			cd_out96_last <= cd_out[96];
 			{CDD_STAT[11],CDD_STAT[10],CDD_STAT[9],CDD_STAT[8],CDD_STAT[7],CDD_STAT[6],CDD_STAT[5],CDD_STAT[4],CDD_STAT[3],CDD_STAT[2],CDD_STAT[1],CDD_STAT[0]} <= cd_out[95:0];
-			cdd_trans_start <= 1;
+//			cdd_trans_start <= 1;
 			cdd_trans_wait <= '1;
 		end else if (cdd_trans_wait) begin
 			cdd_trans_wait <= cdd_trans_wait - 4'd1;
-		end else 
-			cdd_trans_start <= 0;
+			cdd_trans_start <= (cdd_trans_wait == 4'd1);
+		end /*else 
+			cdd_trans_start <= 0;*/
 		
 		if (cdd_comm_rdy) begin
-			cd_in[95:0] <= {HOST_COMM[11],HOST_COMM[10],HOST_COMM[9],HOST_COMM[8],HOST_COMM[7],HOST_COMM[6],HOST_COMM[5],HOST_COMM[4],HOST_COMM[3],HOST_COMM[2],HOST_COMM[1],HOST_COMM[0]};
+			cd_in[95:0] <= {HOST_COMM[11],HOST_COMM[10],cmd06_cnt/*HOST_COMM[9]*/,cmd09_cnt/*HOST_COMM[8]*/,HOST_COMM[7],HOST_COMM[6],HOST_COMM[5],HOST_COMM[4],HOST_COMM[3],HOST_COMM[2],HOST_COMM[1],HOST_COMM[0]};
 			cd_in[96] <= ~cd_in[96];
 //			cd_in96 <= ~cd_in96;
+			if (HOST_COMM[0] == 8'h06) cmd06_cnt <= cmd06_cnt + 8'd1;
+			if (HOST_COMM[0] == 8'h09) cmd09_cnt <= cmd09_cnt + 8'd1;
 		end
 	
+		if (reset) begin
+			cmd06_cnt <= 0;
+			cmd09_cnt <= 0;
+		end
 	end
 //	assign cd_in = {cd_in96,HOST_COMM[11],HOST_COMM[10],HOST_COMM[9],HOST_COMM[8],HOST_COMM[7],HOST_COMM[6],HOST_COMM[5],HOST_COMM[4],HOST_COMM[3],HOST_COMM[2],HOST_COMM[1],HOST_COMM[0]};
 			
@@ -750,7 +760,7 @@ module emu
 		reg [3:0] byte_cnt = '0;
 		reg [2:0] bit_cnt = '0;
 		reg COMCLK_OLD = 0;
-		reg [9:0] cdd_next_delay = '0;
+		reg [10:0] cdd_next_delay = '0;
 		
 		if (cdd_trans_start) CD_COMREQ_N <= 1;
 		if (cdd_trans_next) CD_COMREQ_N <= 0;
@@ -760,7 +770,7 @@ module emu
 		if (reset) begin
 			cdd_trans_done <= 0;
 			bit_cnt <= '0;
-		end else if (cdd_trans_start && !cdd_trans_wait) begin
+		end else if (cdd_trans_start) begin
 			cdd_trans_done <= 0;
 			bit_cnt <= '0;
 		end else if (!CD_COMCLK && COMCLK_OLD) begin
@@ -780,28 +790,28 @@ module emu
 			cdd_trans_next <= 0;
 			cdd_comm_rdy <= 0;
 			byte_cnt <= '0;
-		end else if (cdd_trans_start && !cdd_trans_wait) begin
+		end else if (cdd_trans_start) begin
 			CDD_DATA <= CDD_STAT[0];
 			CD_COMSYNC_N <= 0;
 			byte_cnt <= 4'd0;
-			cdd_trans_next <= 1;
+			cdd_next_delay <= 11'h3FF;
 		end else if (cdd_trans_done) begin
 			HOST_COMM[byte_cnt] <= HOST_DATA;
 			CD_COMSYNC_N <= 1;
 			byte_cnt <= byte_cnt + 4'd1;
 			if (byte_cnt < 4'd11) begin
 				CDD_DATA <= CDD_STAT[byte_cnt + 4'd1];
-				cdd_next_delay <= 10'h3FF;
+				cdd_next_delay <= 11'h3FF;
 			end else if (byte_cnt == 4'd11) begin
 				CDD_DATA <= 8'h00;
-				cdd_next_delay <= 10'h3FF;
+				cdd_next_delay <= 11'h3FF;
 				cdd_comm_rdy <= 1;
 			end
 		end
 		
 		if (cdd_next_delay) begin
-			cdd_next_delay <= cdd_next_delay - 10'h001;
-			cdd_trans_next <= (cdd_next_delay == 10'h001);
+			cdd_next_delay <= cdd_next_delay - 11'h001;
+			cdd_trans_next <= (cdd_next_delay == 11'h001);
 		end
 	end
 	
