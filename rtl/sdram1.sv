@@ -150,6 +150,7 @@ module sdram1
 		reg sync_old;
 		reg old_rd2, old_wr2;
 		reg st_num3_latch;
+		reg ch2_lock;
 		
 		sync_old <= sync;
 		if (!init_done) begin
@@ -158,6 +159,7 @@ module sdram1
 			rd2 <= 0;
 			rd2_pend <= 0;
 			wr2_pend <= 0;
+			ch2_lock <= 0;
 		end else begin
 			st_num <= st_num + 4'd1;
 			if (!sync && sync_old) 
@@ -176,27 +178,31 @@ module sdram1
 			//chip 2
 			old_rd2 <= ch2rd;
 			old_wr2 <= |ch2wr;
-			if (ch2rd && !old_rd2) rd2_pend <= 1;
 			if (ch2wr && !old_wr2) wr2_pend <= 1;
+			if (ch2rd && !old_rd2) rd2_pend <= 1;
 			
-			if (st_num[2:0] == 3'd7 && !rd2 && !wr2 && (rd2_pend || wr2_pend)) begin
+			if (st_num[2:0] == 3'd7 && !rd2 && !wr2 && (ch2rd || ch2wr) && !ch2_lock) begin
 				addr2 <= ch2addr;
 				din2 <= ch2din;
-				rd2 <= ch2rd;
+				rd2 <= ch2rd & ~|ch2wr;
 				wr2 <= |ch2wr;
 				be2 <= ch2wr;
 				st_num3_latch <= st_num[3];
-			end else if (st_num[3] == ~st_num3_latch && st_num[2:0] == 3'd2 && wr2) begin
+				ch2_lock <= 1;
+			end else if (st_num[3] == ~st_num3_latch && st_num[2:0] == 3'd4 && wr2) begin
 				wr2 <= 0;
 				rd2 <= 0;
 				be2 <= 2'b11;
 				wr2_pend <= 0;
-			end else if (st_num[3] == ~st_num3_latch && st_num[2:0] == 3'd7 && rd2) begin
+				rd2_pend <= 0;
+			end else if (st_num[3] == ~st_num3_latch && st_num[2:0] == 3'd6 && rd2) begin
 				rd2 <= 0;
 				wr2 <= 0;
 				be2 <= 2'b11;
+				wr2_pend <= 0;
 				rd2_pend <= 0;
 			end
+			if (!ch2rd && !ch2wr && ch2_lock) ch2_lock <= 0;
 		end
 		
 	end
@@ -303,20 +309,19 @@ module sdram1
 	wire [1:0] out1_bank  = state[5].BANK;
 	wire       out1_chip  = state[5].CHIP;
 	
+	reg [15:0] rbuf;
 	reg [31:0] dout[4] = '{4{'1}};
 	reg [15:0] dout2 = '1;
 	always @(posedge clk) begin
-		reg [15:0] temp;
-		
-		if (data0_read || data1_read) temp <= SDRAM_DQ;
+		if (data0_read || data1_read) rbuf <= SDRAM_DQ;
 
-		if (out0_read && !out0_chip) dout[{1'b0,out0_bank}][31:16] <= temp;
-		if (out1_read && !out1_chip) dout[{1'b0,out1_bank}][15: 0] <= temp;
-		if (out0_read && out0_chip) dout2 <= temp;
+		if (out0_read && !out0_chip) dout[{1'b0,out0_bank}][31:16] <= rbuf;
+		if (out1_read && !out1_chip) dout[{1'b0,out1_bank}][15: 0] <= rbuf;
+		if (out0_read && out0_chip) dout2 <= rbuf;
 	end
 		
 	assign {dout_a0,dout_a1,dout_b0,dout_b1} = {dout[0],dout[1],dout[2],dout[3]};
-	assign ch2dout = dout2;
+	assign ch2dout = out0_read && out0_chip ? rbuf : dout2;
 	
 
 	localparam CMD_NOP             = 3'b111;

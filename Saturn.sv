@@ -1150,7 +1150,7 @@ module emu
 
 	//debug
 	reg  [6:0] SCRN_EN = 7'b1111111;
-	reg  [1:0] SND_EN = 2'b11;
+	reg  [2:0] SND_EN = 3'b111;
 	reg        DBG_PAUSE = 0;
 	reg        DBG_BREAK = 0;
 	reg        DBG_RUN = 0;
@@ -1183,9 +1183,11 @@ module emu
 				'h083: begin SCRN_EN[6] <= ~SCRN_EN[6]; end 	// F7
 				'h00A: begin SND_EN[0] <= ~SND_EN[0]; end 	// F8
 				'h001: begin SND_EN[1] <= ~SND_EN[1]; end 	// F9
+				'h009: begin SND_EN[2] <= ~SND_EN[2]; end 	// F10
+				'h078: begin SCRN_EN <= '1; SND_EN <= '1; end 	// F11
 `ifdef DEBUG
-				'h009: begin DBG_BREAK <= ~DBG_BREAK; end 	// F10
-				'h078: begin DBG_RUN <= 1; end 	// F11
+//				'h009: begin DBG_BREAK <= ~DBG_BREAK; end 	// F10
+//				'h078: begin DBG_RUN <= 1; end 	// F11
 				'h177: begin DBG_PAUSE <= ~DBG_PAUSE; end 	// Pause
 				'h016: begin H320_END_DEC <= 1; end 	// 1
 				'h01E: begin H320_END_INC <= 1; end 	// 2
