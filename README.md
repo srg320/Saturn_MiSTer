@@ -44,6 +44,19 @@ To download select a workflow bellow, click on the most recent run and download 
 
 > **Note:** Actions has a 90-day retention rule by default, after that the artifacts are not available anymore.
 
+Keys F1-F11 enable/disable the video screens/audio channels:
+F1 - VDP2 NBG0
+F2 - VDP2 NBG1
+F3 - VDP2 NBG2
+F4 - VDP2 NBG3
+F5 - VDP2 RBG0
+F6 - VDP2 Sprite
+F7 - VDP2 Windows
+F8 - SCSP Direct sound
+F9 - SCSP DSP sound
+F10 - CD audio
+F11 - enable all
+
 ## Building
 
 ### Prerequisites
@@ -109,13 +122,12 @@ Rename your Saturn bios file to `boot.rom` and place it in the `games/Saturn/` f
 ### Video Display Processor 2 (VDP2)
 
 - [ ] PAL Mode
-- [ ] Interlaced Mode
 - [ ] Line Screen
 - [ ] Mosaic
 
 ### Yamaha SCSP (Saturn Custom Sound Processor) YMF292
 
-- [ ] Yamaha FH1 DSP (Digital Signal Processor)
+- [ ] LFO
 
 ## Credits and acknowledgment
 
