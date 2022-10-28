@@ -181,38 +181,38 @@ module emu
 		end else begin
 			casez(res)
 				4'b00?0: begin // 320 x 224
-					VIDEO_ARX = status[30] ? 8'd10: 8'd64;
-					VIDEO_ARY = status[30] ? 8'd7 : 8'd49;
+					VIDEO_ARX = status[11] ? 8'd10: 8'd64;
+					VIDEO_ARY = status[11] ? 8'd7 : 8'd49;
 				end
 	
 				4'b00?1: begin // 352 x 224
-					VIDEO_ARX = status[30] ? 8'd22: 8'd64;
-					VIDEO_ARY = status[30] ? 8'd14: 8'd49;
+					VIDEO_ARX = status[11] ? 8'd22: 8'd64;
+					VIDEO_ARY = status[11] ? 8'd14: 8'd49;
 				end
 	
 				4'b01?0: begin // 320 x 240
-					VIDEO_ARX = status[30] ? 8'd4 : 8'd128;
-					VIDEO_ARY = status[30] ? 8'd3 : 8'd105;
+					VIDEO_ARX = status[11] ? 8'd4 : 8'd128;
+					VIDEO_ARY = status[11] ? 8'd3 : 8'd105;
 				end
 	
 				4'b01?1: begin // 352 x 240
-					VIDEO_ARX = status[30] ? 8'd22: 8'd128;
-					VIDEO_ARY = status[30] ? 8'd15: 8'd105;
+					VIDEO_ARX = status[11] ? 8'd22: 8'd128;
+					VIDEO_ARY = status[11] ? 8'd15: 8'd105;
 				end
 	
 				4'b10?0: begin // 320 x 256
-					VIDEO_ARX = status[30] ? 8'd5 : 8'd64;
-					VIDEO_ARY = status[30] ? 8'd4 : 8'd49;
+					VIDEO_ARX = status[11] ? 8'd5 : 8'd64;
+					VIDEO_ARY = status[11] ? 8'd4 : 8'd49;
 				end
 	
 				4'b10?1: begin // 352 x 256
-					VIDEO_ARX = status[30] ? 8'd11: 8'd128;
-					VIDEO_ARY = status[30] ? 8'd8 : 8'd105;
+					VIDEO_ARX = status[11] ? 8'd11: 8'd128;
+					VIDEO_ARY = status[11] ? 8'd8 : 8'd105;
 				end
 	
 				default: begin // not supported
-					VIDEO_ARX = status[30] ? 8'd10: 8'd64;
-					VIDEO_ARY = status[30] ? 8'd7 : 8'd49;
+					VIDEO_ARX = status[11] ? 8'd10: 8'd64;
+					VIDEO_ARY = status[11] ? 8'd7 : 8'd49;
 				end
 			endcase
 		end
@@ -235,7 +235,7 @@ module emu
 	// 0         1         2         3          4         5         6   
 	// 01234567890123456789012345678901 23456789012345678901234567890123
 	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-	// XXXXXXXXXXXX XXXXXXXXXXXXXXXXXXX XX XXXXXXXXXXXXXx              
+	// XXXX XXXXXXXXXXX                 XXXXXXXXXXXXX                 
 	
 	`include "build_id.v"
 	localparam CONF_STR = {
@@ -243,37 +243,37 @@ module emu
 		"S0,CUE,Insert Disk;",
 		"FS,BIN;",
 		"-;",
-		"oG,Time set,No,Yes;",
-		"oHJ,Region,Japan,Taiwan,USA,Brazil,Korea,Asia,Europe;",
+		"o0,Time set,No,Yes;",
+		"o13,Region,Japan,Taiwan,USA,Brazil,Korea,Asia,Europe;",
 		"-;",
 		"P1,Audio & Video;",
 		"P1-;",
 		"P1OA,Aspect Ratio,4:3,16:9;",
-		"P1OU,320x224 Aspect,Original,Corrected;",
+		"P1OB,320x224 Aspect,Original,Corrected;",
 		"P1O13,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 		"P1-;",
-		"P1OT,Border,No,Yes;",
-		"P1oEF,Composite Blend,Off,On,Adaptive;",
-//		"P1-;",
-//		"P1OEF,Audio Filter,Model 1,Model 2,Minimal,No Filter;",
-//		"P1OB,FM Chip,YM2612,YM3438;",
-//		"P1ON,HiFi PCM,No,Yes;",
+		"P1OC,Border,No,Yes;",
+		"P1ODE,Composite Blend,Off,On,Adaptive;",
 	
-//		"P2,Input;",
-//		"P2-;",
-//		"P2O4,Swap Joysticks,No,Yes;",
-//		"P2O5,6 Buttons Mode,No,Yes;",
-//		"P2o57,Multitap,Disabled,4-Way,TeamPlayer: Port1,TeamPlayer: Port2,J-Cart;",
-//		"P2-;",
-//		"P2OIJ,Mouse,None,Port1,Port2;",
-//		"P2OK,Mouse Flip Y,No,Yes;",
-//		"P2-;",
-//		"P2oD,Serial,OFF,SNAC;",
-//		"P2-;",
-//		"P2o89,Gun Control,Disabled,Joy1,Joy2,Mouse;",
-//		"D4P2oA,Gun Fire,Joy,Mouse;",
-//		"D4P2oBC,Cross,Small,Medium,Big,None;",
-	
+		"P2,Input;",
+		"P2-;",
+		"P2OF,Pad 2,Disable,Enable;",
+		
+`ifndef DEBUG
+		"P3,Debug;",
+		"P3-;",
+		"P3o4,VDP2 NBG0,Enable,Disable;",
+		"P3o5,VDP2 NBG1,Enable,Disable;",
+		"P3o6,VDP2 NBG2,Enable,Disable;",
+		"P3o7,VDP2 NBG3,Enable,Disable;",
+		"P3o8,VDP2 RBG0,Enable,Disable;",
+		"P3o9,VDP2 Sprite,Enable,Disable;",
+		"P3-;",
+		"P3oA,SCSP Direct sound,Enable,Disable;",
+		"P3oB,SCSP DSP sound,Enable,Disable;",
+		"P3oC,CD audio,Enable,Disable;",
+`endif
+
 		"-;",
 		"R0,Reset;",
 		"J1,A,B,C,Start,R,X,Y,Z,L;",
@@ -479,13 +479,13 @@ module emu
 	
 	wire reset = RESET | status[0] | buttons[1] | bios_download;
 	
-	wire  [3:0] area_code = status[51:49] == 3'd0 ? 4'h1 :	//Japan area
-									status[51:49] == 3'd1 ? 4'h2 :	//Asia NTSC area
-									status[51:49] == 3'd2 ? 4'h4 :	//North America area
-									status[51:49] == 3'd3 ? 4'h5 :	//Central/S. America NTSC area
-									status[51:49] == 3'd4 ? 4'h6 :	//Korea area
-									status[51:49] == 3'd5 ? 4'hA :	//Asia PAL area
-									status[51:49] == 3'd6 ? 4'hC :	//Europe PAL area
+	wire  [3:0] area_code = status[35:33] == 3'd0 ? 4'h1 :	//Japan area
+									status[35:33] == 3'd1 ? 4'h2 :	//Asia NTSC area
+									status[35:33] == 3'd2 ? 4'h4 :	//North America area
+									status[35:33] == 3'd3 ? 4'h5 :	//Central/S. America NTSC area
+									status[35:33] == 3'd4 ? 4'h6 :	//Korea area
+									status[35:33] == 3'd5 ? 4'hA :	//Asia PAL area
+									status[35:33] == 3'd6 ? 4'hC :	//Europe PAL area
 																	4'h3;		//Reserved
 	wire [15:0] joy1 = {~joystick_0[0],~joystick_0[1],~joystick_0[2],~joystick_0[3],~joystick_0[7],~joystick_0[4],~joystick_0[6],~joystick_0[5],
 							  ~joystick_0[8],~joystick_0[9],~joystick_0[10],~joystick_0[11],~joystick_0[12],3'b111};
@@ -608,7 +608,7 @@ module emu
 		
 		.SRES_N(~status[0]),
 		
-		.TIME_SET(~status[48]),
+		.TIME_SET(~status[32]),
 		.AREA(area_code),
 		
 		.MEM_A(MEM_A),
@@ -702,9 +702,10 @@ module emu
 			
 		.JOY1(joy1),
 		.JOY2(joy2),
+		.JOY2_EN(status[15]),
 		
-		.SCRN_EN(SCRN_EN),
-		.SND_EN(SND_EN),
+		.SCRN_EN(SCRN_EN & SCRN_EN2),
+		.SND_EN(SND_EN & SND_EN2),
 		.DBG_PAUSE(DBG_PAUSE),
 		.DBG_BREAK(DBG_BREAK),
 		.DBG_RUN(DBG_RUN),
@@ -911,15 +912,15 @@ module emu
 	(
 		.*,
 		.clk(clk_ram),
-	
-		//VDP1 VRAM
-		.mem0_addr({ 9'b000001000,   VDP1_VRAM_A[18:1]}       ),
-		.mem0_din ({16'h0000,VDP1_VRAM_D}                     ),
-		.mem0_wr  ({2'b00,VDP1_VRAM_WE}                       ),
-		.mem0_rd  (VDP1_VRAM_RD                               ),
+		
+		//
+		.mem0_addr('0                                         ),
+		.mem0_din ('0                                         ),
+		.mem0_wr  ('0                                         ),
+		.mem0_rd  (0                                          ),
 		.mem0_dout(ddr_do[0]                                  ),
-		.mem0_16b (1                                          ),
-		.mem0_wcen(1                                          ),
+		.mem0_16b (0                                          ),
+		.mem0_wcen(0                                          ),
 		.mem0_busy(ddr_busy[0]                                ),
 	
 		//CD RAM
@@ -966,15 +967,15 @@ module emu
 		.mem4_16b (1                                          ),
 		.mem4_wcen(1                                          ),
 		.mem4_busy(ddr_busy[4]                                ),
-		
-		//
-		.mem5_addr('0                                         ),
-		.mem5_din ('0                                         ),
-		.mem5_wr  ('0                                         ),
-		.mem5_rd  (0                                          ),
+	
+		//VDP1 VRAM
+		.mem5_addr({ 9'b000001000,   VDP1_VRAM_A[18:1]}       ),
+		.mem5_din ({16'h0000,VDP1_VRAM_D}                     ),
+		.mem5_wr  ({2'b00,VDP1_VRAM_WE}                       ),
+		.mem5_rd  (VDP1_VRAM_RD                               ),
 		.mem5_dout(ddr_do[5]                                  ),
 		.mem5_16b (1                                          ),
-		.mem5_wcen(0                                          ),
+		.mem5_wcen(1                                          ),
 		.mem5_busy(ddr_busy[5]                                ),
 		
 		//BIOS ROM
@@ -997,8 +998,8 @@ module emu
 		.mem7_wcen(0                                          ),
 		.mem7_busy(ddr_busy[7]                                )
 	);
-	assign VDP1_VRAM_Q = {2{ddr_do[0][15:0]}};
-	assign VDP1_VRAM_RDY = ~ddr_busy[0];
+	assign VDP1_VRAM_Q = {2{ddr_do[5][15:0]}};
+	assign VDP1_VRAM_RDY = ~ddr_busy[5];
 	assign MEM_DI     = !ROM_CS_N  ? ddr_do[2] :
 							  !SRAM_CS_N ? ddr_do[2] :
 							  !RAML_CS_N ? ddr_do[4] :
@@ -1197,5 +1198,13 @@ module emu
 			endcase
 		end
 	end
+	
+	
+	reg  [6:0] SCRN_EN2 = 7'b1111111;
+	reg  [2:0] SND_EN2 = 3'b111;
+`ifndef DEBUG
+	assign SCRN_EN2 = ~status[41:36];
+	assign SND_EN2 = ~status[44:42];
+`endif
 
 endmodule
