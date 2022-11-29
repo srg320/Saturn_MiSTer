@@ -235,7 +235,7 @@ module emu
 	// 0         1         2         3          4         5         6   
 	// 01234567890123456789012345678901 23456789012345678901234567890123
 	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-	// XXXX XXXXXXXXXXX                 XXXXXXXXXXXXX                 
+	// XXXX XXXXXXXXXXXXXXXX            XXXXXXXXXXXXX                 
 	
 	`include "build_id.v"
 	localparam CONF_STR = {
@@ -257,7 +257,9 @@ module emu
 	
 		"P2,Input;",
 		"P2-;",
-		"P2OF,Pad 2,Disable,Enable;",
+		"P2OFH,Pad 1,Digital,Off,Analog,Wheel,Lightgun;",
+		"P2OIK,Pad 2,Digital,Off,Analog,Wheel,Lightgun;",
+		"-;",
 		
 `ifndef DEBUG
 		"P3,Debug;",
@@ -491,6 +493,7 @@ module emu
 							  ~joystick_0[8],~joystick_0[9],~joystick_0[10],~joystick_0[11],~joystick_0[12],3'b111};
 	wire [15:0] joy2 = {~joystick_1[0],~joystick_1[1],~joystick_1[2],~joystick_1[3],~joystick_1[7],~joystick_1[4],~joystick_1[6],~joystick_1[5],
 							  ~joystick_1[8],~joystick_1[9],~joystick_1[10],~joystick_1[11],~joystick_1[12],3'b111};
+
 	
 	wire [24:0] MEM_A;
 	wire [31:0] MEM_DI;
@@ -702,7 +705,8 @@ module emu
 			
 		.JOY1(joy1),
 		.JOY2(joy2),
-		.JOY2_EN(status[15]),
+		.JOY1_TYPE(status[17:15]),
+		.JOY2_TYPE(status[20:18]),
 		
 		.SCRN_EN(SCRN_EN & SCRN_EN2),
 		.SND_EN(SND_EN & SND_EN2),
