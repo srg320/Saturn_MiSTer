@@ -287,7 +287,7 @@ module emu
 	wire [63:0] status;
 	wire  [1:0] buttons;
 	wire [12:0] joystick_0,joystick_1,joystick_2,joystick_3,joystick_4;
-	wire  [7:0] joy0_x,joy0_y,joy1_x,joy1_y;
+	wire  [7:0] joy0_x0,joy0_y0,joy0_x1,joy0_y1,joy1_x0,joy1_y0,joy1_x1,joy1_y1;
 	wire        ioctl_download;
 	wire        ioctl_wr;
 	wire [24:0] ioctl_addr;
@@ -326,8 +326,10 @@ module emu
 		.joystick_2(joystick_2),
 		.joystick_3(joystick_3),
 		.joystick_4(joystick_4),
-		.joystick_l_analog_0({joy0_y, joy0_x}),
-		.joystick_l_analog_1({joy1_y, joy1_x}),
+		.joystick_l_analog_0({joy0_y0, joy0_x0}),
+		.joystick_l_analog_1({joy1_y0, joy1_x0}),
+		.joystick_r_analog_0({joy0_y1, joy0_x1}),
+		.joystick_r_analog_1({joy1_y1, joy1_x1}),
 	
 		.buttons(buttons),
 		.forced_scandoubler(forced_scandoubler),
@@ -706,10 +708,14 @@ module emu
 		.JOY1(joy1),
 		.JOY2(joy2),
 
-		.JOY1_X(joy0_x),
-		.JOY1_Y(joy0_y),
-		.JOY2_X(joy1_x),
-		.JOY2_Y(joy1_y),
+		.JOY1_X1(joy0_x0),
+		.JOY1_Y1(joy0_y0),
+		.JOY1_X2(joy0_x1),
+		.JOY1_Y2(joy0_y1),
+		.JOY2_X1(joy1_x0),
+		.JOY2_Y1(joy1_y0),
+		.JOY2_X2(joy1_x1),
+		.JOY2_Y2(joy1_y1),
 
 		.JOY1_TYPE(status[17:15]),
 		.JOY2_TYPE(status[20:18]),
