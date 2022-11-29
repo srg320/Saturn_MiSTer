@@ -705,6 +705,12 @@ module emu
 			
 		.JOY1(joy1),
 		.JOY2(joy2),
+
+		.JOY1_X(joy0_x),
+		.JOY1_Y(joy0_y),
+		.JOY2_X(joy1_x),
+		.JOY2_Y(joy1_y),
+
 		.JOY1_TYPE(status[17:15]),
 		.JOY2_TYPE(status[20:18]),
 		
