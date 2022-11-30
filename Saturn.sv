@@ -257,8 +257,8 @@ module emu
 	
 		"P2,Input;",
 		"P2-;",
-		"P2OFH,Pad 1,Digital,Off,Analog,Wheel,Lightgun;",
-		"P2OIK,Pad 2,Digital,Off,Analog,Wheel,Lightgun;",
+		"P2OFH,Pad 1,Digital,Off,Wheel,Mission Stick,3D Pad,Dual Mission,Lightgun;",
+		"P2OIK,Pad 2,Digital,Off,Wheel,Mission Stick,3D Pad,Dual Mission,Lightgun;",
 		"-;",
 		
 `ifndef DEBUG
