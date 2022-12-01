@@ -235,7 +235,7 @@ module emu
 	// 0         1         2         3          4         5         6   
 	// 01234567890123456789012345678901 23456789012345678901234567890123
 	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-	// XXXX XXXXXXXXXXX                 XXXXXXXXXXXXX                 
+	// XXXX XXXXXXXXXXXXXXXX            XXXXXXXXXXXXX                 
 	
 	`include "build_id.v"
 	localparam CONF_STR = {
@@ -257,7 +257,9 @@ module emu
 	
 		"P2,Input;",
 		"P2-;",
-		"P2OF,Pad 2,Disable,Enable;",
+		"P2OFH,Pad 1,Digital,Off,Wheel,Mission Stick,3D Pad,Dual Mission;",
+		"P2OIK,Pad 2,Digital,Off,Wheel,Mission Stick,3D Pad,Dual Mission;",
+		"-;",
 		
 `ifndef DEBUG
 		"P3,Debug;",
@@ -285,7 +287,7 @@ module emu
 	wire [63:0] status;
 	wire  [1:0] buttons;
 	wire [12:0] joystick_0,joystick_1,joystick_2,joystick_3,joystick_4;
-	wire  [7:0] joy0_x,joy0_y,joy1_x,joy1_y;
+	wire  [7:0] joy0_x0,joy0_y0,joy0_x1,joy0_y1,joy1_x0,joy1_y0,joy1_x1,joy1_y1;
 	wire        ioctl_download;
 	wire        ioctl_wr;
 	wire [24:0] ioctl_addr;
@@ -324,8 +326,10 @@ module emu
 		.joystick_2(joystick_2),
 		.joystick_3(joystick_3),
 		.joystick_4(joystick_4),
-		.joystick_l_analog_0({joy0_y, joy0_x}),
-		.joystick_l_analog_1({joy1_y, joy1_x}),
+		.joystick_l_analog_0({joy0_y0, joy0_x0}),
+		.joystick_l_analog_1({joy1_y0, joy1_x0}),
+		.joystick_r_analog_0({joy0_y1, joy0_x1}),
+		.joystick_r_analog_1({joy1_y1, joy1_x1}),
 	
 		.buttons(buttons),
 		.forced_scandoubler(forced_scandoubler),
@@ -491,6 +495,7 @@ module emu
 							  ~joystick_0[8],~joystick_0[9],~joystick_0[10],~joystick_0[11],~joystick_0[12],3'b111};
 	wire [15:0] joy2 = {~joystick_1[0],~joystick_1[1],~joystick_1[2],~joystick_1[3],~joystick_1[7],~joystick_1[4],~joystick_1[6],~joystick_1[5],
 							  ~joystick_1[8],~joystick_1[9],~joystick_1[10],~joystick_1[11],~joystick_1[12],3'b111};
+
 	
 	wire [24:0] MEM_A;
 	wire [31:0] MEM_DI;
@@ -702,7 +707,18 @@ module emu
 			
 		.JOY1(joy1),
 		.JOY2(joy2),
-		.JOY2_EN(status[15]),
+
+		.JOY1_X1(joy0_x0),
+		.JOY1_Y1(joy0_y0),
+		.JOY1_X2(joy0_x1),
+		.JOY1_Y2(joy0_y1),
+		.JOY2_X1(joy1_x0),
+		.JOY2_Y1(joy1_y0),
+		.JOY2_X2(joy1_x1),
+		.JOY2_Y2(joy1_y1),
+
+		.JOY1_TYPE(status[17:15]),
+		.JOY2_TYPE(status[20:18]),
 		
 		.SCRN_EN(SCRN_EN & SCRN_EN2),
 		.SND_EN(SND_EN & SND_EN2),
