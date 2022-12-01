@@ -22,8 +22,8 @@ The Saturn was a 32-bit console by Sega, released in 1994 in Japan and 1995 in N
   - Sega/Hitachi VDP1 @ 28.63 MHz (sprite/texture and polygons)
   - Sega/Yamaha VDP2 @ 28.63 MHz (background, scroll and 3D)
 - **Resolution**: 320x224 to 704x224, 16,777,216 millions colors
-- **Sound CPU**: Motorola 68ECOO @ 22.6 MHz
-- **Sound Processor**: Yamaha SCSP (Saturn Custom Sound Processor) YMF292
+- **Sound CPU**: Motorola 68EC000 @ 11.3 MHz
+- **Sound Processor**: Yamaha SCSP (Saturn Custom Sound Processor) YMF292 @ 22.6 MHz
 - **Media**: CD-ROM
 
 ## Hardware Requirements
