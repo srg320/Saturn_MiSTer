@@ -235,15 +235,16 @@ module emu
 	// 0         1         2         3          4         5         6   
 	// 01234567890123456789012345678901 23456789012345678901234567890123
 	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-	// XXXX XXXXXXXXXXXXXXXX            XXXXXXXXXXXXX                 
+	// XXXX XXXXXXXXXXXXXXXXXXX          XXXXXXXXXXXXX                
 	
 	`include "build_id.v"
 	localparam CONF_STR = {
 		"Saturn;;",
 		"S0,CUE,Insert Disk;",
-		"FS,BIN;",
+		"FS2,BIN,Load bios;",
+		"FS3,BIN,Load cartridge;",
 		"-;",
-		"o0,Time set,No,Yes;",
+		"OLN,Cartridge,None,ROM 2M,DRAM 1M,DRAM 4M;",
 		"o13,Region,Japan,Taiwan,USA,Brazil,Korea,Asia,Europe;",
 		"-;",
 		"P1,Audio & Video;",
@@ -270,10 +271,11 @@ module emu
 		"P3o7,VDP2 NBG3,Enable,Disable;",
 		"P3o8,VDP2 RBG0,Enable,Disable;",
 		"P3o9,VDP2 Sprite,Enable,Disable;",
+		"P3oA,VDP2 Shadow,Enable,Disable;",
 		"P3-;",
-		"P3oA,SCSP Direct sound,Enable,Disable;",
-		"P3oB,SCSP DSP sound,Enable,Disable;",
-		"P3oC,CD audio,Enable,Disable;",
+		"P3oB,SCSP Direct sound,Enable,Disable;",
+		"P3oC,SCSP DSP sound,Enable,Disable;",
+		"P3oD,CD audio,Enable,Disable;",
 `endif
 
 		"-;",
@@ -366,24 +368,15 @@ module emu
 		.ps2_mouse(ps2_mouse),
 	
 		.EXT_BUS(EXT_BUS)
-	
 	);
 	
 	reg  [1:0] region_req = '0;
 	reg        region_set = 0;
 	
-	wire [96:0] cd_in;
-	wire [96:0] cd_out;
-	hps_ext hps_ext
-	(
-		.clk_sys(clk_sys),
-		.EXT_BUS(EXT_BUS),
-		.cd_in(cd_in),
-		.cd_out(cd_out)
-	);
-	
-	wire bios_download = ioctl_download & (ioctl_index[5:2] == 4'b0000);
-	wire cdd_download = ioctl_download & (ioctl_index[5:2] == 4'b0001);//[0]:0=speed 1x,1=speed 2x; [1]:0=data,1=cdda;
+	wire bios_download = ioctl_download & (ioctl_index[5:2] == 4'b0000 && ioctl_index[1:0] != 2'h3);
+	wire cart_download = ioctl_download & (ioctl_index[5:2] == 4'b0000 && ioctl_index[1:0] == 2'h3);
+	wire cdd_download = ioctl_download & (ioctl_index[5:2] == 4'b0001);
+	wire cdd_download2 = ioctl_download & (ioctl_index[5:2] == 4'b0010);
 	
 	reg osd_btn = 0;
 //	always @(posedge clk_sys) begin
@@ -497,6 +490,9 @@ module emu
 							  ~joystick_1[8],~joystick_1[9],~joystick_1[10],~joystick_1[11],~joystick_1[12],3'b111};
 
 	
+	
+	
+	
 	wire [24:0] MEM_A;
 	wire [31:0] MEM_DI;
 	wire [31:0] MEM_DO;
@@ -510,7 +506,7 @@ module emu
 	
 	wire [18:1] VDP1_VRAM_A;
 	wire [15:0] VDP1_VRAM_D;
-	wire [31:0] VDP1_VRAM_Q;
+	wire [15:0] VDP1_VRAM_Q;
 	wire  [1:0] VDP1_VRAM_WE;
 	wire        VDP1_VRAM_RD;
 	wire        VDP1_VRAM_RDY;
@@ -524,6 +520,7 @@ module emu
 	wire [15:0] VDP1_FB1_Q;
 	wire  [1:0] VDP1_FB1_WE;
 	wire        VDP1_FB1_RD;
+	wire        VDP1_FB_RDY;
 	
 	wire [17:1] VDP2_RA0_A;
 	wire [16:1] VDP2_RA1_A;
@@ -549,11 +546,25 @@ module emu
 	wire        SCSP_RAM_RFS;
 	wire        SCSP_RAM_RDY;
 	
-	reg         CD_CDATA = 0;
+	wire [ 6: 0] SMPC_PDR1I;
+	wire [ 6: 0] SMPC_PDR1O;
+	wire [ 6: 0] SMPC_DDR1;
+	wire [ 6: 0] SMPC_PDR2I;
+	wire [ 6: 0] SMPC_PDR2O;
+	wire [ 6: 0] SMPC_DDR2;
+	wire         SMPC_INPUT_ACT;
+	wire [ 4: 0] SMPC_INPUT_POS;
+	wire [ 7:0 ] SMPC_INPUT_DATA;
+	wire         SMPC_INPUT_WE;
+	
+	wire        CD_CDATA;
 	wire        CD_HDATA;
 	wire        CD_COMCLK;
-	reg         CD_COMREQ_N = 1;
-	reg         CD_COMSYNC_N = 1;
+	wire        CD_COMREQ_N;
+	wire        CD_COMSYNC_N;
+	wire [17:0] CD_DATA;
+	wire        CD_CK;
+	wire        CD_AUDIO;
 	
 	wire [18:1] CD_RAM_A;
 	wire [15:0] CD_RAM_D;
@@ -562,6 +573,13 @@ module emu
 	wire        CD_RAM_CS;
 	wire [15:0] CD_RAM_Q;
 	wire        CD_RAM_RDY;
+	
+	wire [21:1] CART_MEM_A;
+	wire [15:0] CART_MEM_D;
+	wire [15:0] CART_MEM_Q;
+	wire [ 1:0] CART_MEM_WE;
+	wire        CART_MEM_RD;
+	wire        CART_MEM_RDY;
 	
 	wire  [7:0] R, G, B;
 	wire        HS_N,VS_N;
@@ -574,6 +592,22 @@ module emu
 	wire        DCE_R;
 
 	wire [31:0] in_clk = !HRES[0] ? 53685200 : 57272720;
+	
+	bit MCLK_DIV;
+	always @(posedge clk_sys) MCLK_DIV <= ~MCLK_DIV;
+	wire SYS_CE_R =  MCLK_DIV;
+	wire SYS_CE_F = ~MCLK_DIV;
+	
+	wire SMPC_CE;		//SMPC clock 4.0000MHz
+	CEGen SMPC_CEGen
+	(
+		.CLK(clk_sys),
+		.RST_N(1/*RST_N*/),
+		.IN_CLK(in_clk),
+		.OUT_CLK(4000000),
+		.CE(SMPC_CE)
+	);
+	
 	wire SCSP_CE;		//SCSP clock 22.5792MHz
 	CEGen SCSP_CEGen
 	(
@@ -608,13 +642,12 @@ module emu
 	(
 		.RST_N(~reset),
 		.CLK(clk_sys),
-		.CE(1),
-		.EN(1),
+		.EN(~DBG_PAUSE),
+		
+		.SYS_CE_F(SYS_CE_F),
+		.SYS_CE_R(SYS_CE_R),
 		
 		.SRES_N(~status[0]),
-		
-		.TIME_SET(~status[32]),
-		.AREA(area_code),
 		
 		.MEM_A(MEM_A),
 		.MEM_DI(MEM_DI),
@@ -643,7 +676,7 @@ module emu
 		.VDP1_FB1_WE(VDP1_FB1_WE),
 		.VDP1_FB1_RD(VDP1_FB1_RD),
 		.VDP1_FB1_Q(VDP1_FB1_Q),
-		.VDP1_FB_RDY(1),
+		.VDP1_FB_RDY(VDP1_FB_RDY),
 			
 		.VDP2_RA0_A(VDP2_RA0_A),
 		.VDP2_RA1_A(VDP2_RA1_A),
@@ -670,15 +703,29 @@ module emu
 		.SCSP_RAM_RFS(SCSP_RAM_RFS),
 		.SCSP_RAM_RDY(SCSP_RAM_RDY),
 		
+		.SMPC_CE(SMPC_CE),
+		.TIME_SET(~status[32]),
+		.SMPC_AREA(area_code),
+		.SMPC_PDR1I(SMPC_PDR1I),
+		.SMPC_PDR1O(SMPC_PDR1O),
+		.SMPC_DDR1(SMPC_DDR1),
+		.SMPC_PDR2I(SMPC_PDR2I),
+		.SMPC_PDR2O(SMPC_PDR2O),
+		.SMPC_DDR2(SMPC_DDR2),
+		.SMPC_INPUT_ACT(SMPC_INPUT_ACT),
+		.SMPC_INPUT_POS(SMPC_INPUT_POS),
+		.SMPC_INPUT_DATA(SMPC_INPUT_DATA),
+		.SMPC_INPUT_WE(SMPC_INPUT_WE),
+		
 		.CD_CE(CD_CE),
-		.CDD_CE(CDD_2X_CE),
 		.CD_CDATA(CD_CDATA),
 		.CD_HDATA(CD_HDATA),
 		.CD_COMCLK(CD_COMCLK),
 		.CD_COMREQ_N(CD_COMREQ_N),
 		.CD_COMSYNC_N(CD_COMSYNC_N),
-		.CD_D(cdc_d),
-		.CD_CK(cdc_wr),
+		.CD_D(CD_DATA),
+		.CD_CK(CD_CK),
+		.CD_AUDIO(CD_AUDIO),
 		.CD_RAM_A(CD_RAM_A),
 		.CD_RAM_D(CD_RAM_D),
 		.CD_RAM_WE(CD_RAM_WE),
@@ -686,6 +733,14 @@ module emu
 		.CD_RAM_CS(CD_RAM_CS),
 		.CD_RAM_Q(CD_RAM_Q),
 		.CD_RAM_RDY(CD_RAM_RDY),
+		
+		.CART_MODE(status[23:21]),
+		.CART_MEM_A(CART_MEM_A),
+		.CART_MEM_D(CART_MEM_D),
+		.CART_MEM_WE(CART_MEM_WE),
+		.CART_MEM_RD(CART_MEM_RD),
+		.CART_MEM_Q(CART_MEM_Q),
+		.CART_MEM_RDY(CART_MEM_RDY),
 		
 		.R(R),
 		.G(G),
@@ -704,7 +759,34 @@ module emu
 		
 		.SOUND_L(AUDIO_L),
 		.SOUND_R(AUDIO_R),
-			
+		
+		.SCRN_EN(SCRN_EN & SCRN_EN2),
+		.SND_EN(SND_EN & SND_EN2),
+		.DBG_PAUSE(DBG_PAUSE),
+		.DBG_BREAK(DBG_BREAK),
+		.DBG_RUN(DBG_RUN),
+		.DBG_EXT(DBG_EXT)
+	);
+	
+	
+	HPS2PAD PAD
+	(
+		.CLK(clk_sys),
+		.RST_N(~reset),
+		.SMPC_CE(SMPC_CE),
+		
+		.PDR1I(SMPC_PDR1I),
+		.PDR1O(SMPC_PDR1O),
+		.DDR1(SMPC_DDR1),
+		.PDR2I(SMPC_PDR2I),
+		.PDR2O(SMPC_PDR2O),
+		.DDR2(SMPC_DDR2),
+		
+		.INPUT_ACT(SMPC_INPUT_ACT),
+		.INPUT_POS(SMPC_INPUT_POS),
+		.INPUT_DATA(SMPC_INPUT_DATA),
+		.INPUT_WE(SMPC_INPUT_WE),
+		
 		.JOY1(joy1),
 		.JOY2(joy2),
 
@@ -718,153 +800,40 @@ module emu
 		.JOY2_Y2(joy1_y1),
 
 		.JOY1_TYPE(status[17:15]),
-		.JOY2_TYPE(status[20:18]),
-		
-		.SCRN_EN(SCRN_EN & SCRN_EN2),
-		.SND_EN(SND_EN & SND_EN2),
-		.DBG_PAUSE(DBG_PAUSE),
-		.DBG_BREAK(DBG_BREAK),
-		.DBG_RUN(DBG_RUN),
-		.H320_END_INC(H320_END_INC),
-		.H320_END_DEC(H320_END_DEC),
-		.H352_END_INC(H352_END_INC),
-		.H352_END_DEC(H352_END_DEC)
+		.JOY2_TYPE(status[20:18])
 	);
 	
-	reg [7:0] HOST_COMM[12];
-	reg [7:0] CDD_STAT[12] = '{8'h12,8'h41,8'h01,8'h01,8'h00,8'h02,8'h03,8'h04,8'h00,8'h04,8'h03,8'h9A};
-	reg       cdd_trans_start = 0;
-	reg [3:0] cdd_trans_wait = '0;
-	reg       cd_in96 = 0;
-	reg [7:0] cmd06_cnt;
-	reg [7:0] cmd09_cnt;
-	always @(posedge clk_sys) begin
-		reg cd_out96_last = 1;
-	
-		cdd_trans_start <= 0;
-		if (cd_out[96] != cd_out96_last)  begin
-			cd_out96_last <= cd_out[96];
-			{CDD_STAT[11],CDD_STAT[10],CDD_STAT[9],CDD_STAT[8],CDD_STAT[7],CDD_STAT[6],CDD_STAT[5],CDD_STAT[4],CDD_STAT[3],CDD_STAT[2],CDD_STAT[1],CDD_STAT[0]} <= cd_out[95:0];
-//			cdd_trans_start <= 1;
-			cdd_trans_wait <= '1;
-		end else if (cdd_trans_wait) begin
-			cdd_trans_wait <= cdd_trans_wait - 4'd1;
-			cdd_trans_start <= (cdd_trans_wait == 4'd1);
-		end /*else 
-			cdd_trans_start <= 0;*/
+	wire [13:1] CD_BUF_ADDR;
+	wire [15:0] CD_BUF_DI;
+	wire        CD_BUF_RD;
+	wire        CD_BUF_RDY;
+	HPS2CDD CDD (
+		.CLK(clk_sys),
+		.RST_N(~reset),
 		
-		if (cdd_comm_rdy) begin
-			cd_in[95:0] <= {HOST_COMM[11],HOST_COMM[10],cmd06_cnt/*HOST_COMM[9]*/,cmd09_cnt/*HOST_COMM[8]*/,HOST_COMM[7],HOST_COMM[6],HOST_COMM[5],HOST_COMM[4],HOST_COMM[3],HOST_COMM[2],HOST_COMM[1],HOST_COMM[0]};
-			cd_in[96] <= ~cd_in[96];
-//			cd_in96 <= ~cd_in96;
-			if (HOST_COMM[0] == 8'h06) cmd06_cnt <= cmd06_cnt + 8'd1;
-			if (HOST_COMM[0] == 8'h09) cmd09_cnt <= cmd09_cnt + 8'd1;
-		end
-	
-		if (reset) begin
-			cmd06_cnt <= 0;
-			cmd09_cnt <= 0;
-		end
-	end
-//	assign cd_in = {cd_in96,HOST_COMM[11],HOST_COMM[10],HOST_COMM[9],HOST_COMM[8],HOST_COMM[7],HOST_COMM[6],HOST_COMM[5],HOST_COMM[4],HOST_COMM[3],HOST_COMM[2],HOST_COMM[1],HOST_COMM[0]};
+		.EXT_BUS(EXT_BUS),
+		
+		.CDD_CE(CDD_2X_CE),
+		.CD_CDATA(CD_CDATA),
+		.CD_HDATA(CD_HDATA),
+		.CD_COMCLK(CD_COMCLK),
+		.CD_COMREQ_N(CD_COMREQ_N),
+		.CD_COMSYNC_N(CD_COMSYNC_N),
+		
+		.CDD_ACT(cdd_download),
+		.CDD_ACT2(cdd_download2),
+		.CDD_WR(ioctl_wr),
+		.CDD_DI(ioctl_data),
+		
+		.CD_BUF_ADDR(CD_BUF_ADDR),
+		.CD_BUF_DI(CD_BUF_DI),
+		.CD_BUF_RD(CD_BUF_RD),
+		.CD_BUF_RDY(CD_BUF_RDY),
 			
-	reg [7:0] HOST_DATA = '0;
-	reg [7:0] CDD_DATA = '0;
-	reg cdd_trans_next = 0;
-	reg cdd_trans_done = 0;
-	reg cdd_comm_rdy = 0;
-	always @(posedge clk_sys) begin
-		reg [3:0] byte_cnt = '0;
-		reg [2:0] bit_cnt = '0;
-		reg COMCLK_OLD = 0;
-		reg [10:0] cdd_next_delay = '0;
-		
-		if (cdd_trans_start) CD_COMREQ_N <= 1;
-		if (cdd_trans_next) CD_COMREQ_N <= 0;
-		
-		COMCLK_OLD <= CD_COMCLK;
-		cdd_trans_done <= 0;
-		if (reset) begin
-			cdd_trans_done <= 0;
-			bit_cnt <= '0;
-		end else if (cdd_trans_start) begin
-			cdd_trans_done <= 0;
-			bit_cnt <= '0;
-		end else if (!CD_COMCLK && COMCLK_OLD) begin
-			{CDD_DATA,CD_CDATA} <= {1'b0,CDD_DATA};
-		end else if (CD_COMCLK && !COMCLK_OLD) begin
-			HOST_DATA <= {CD_HDATA,HOST_DATA[7:1]};
-			CD_COMREQ_N <= 1;
-			bit_cnt <= bit_cnt + 3'd1;
-			if (bit_cnt == 3'd7) begin
-				cdd_trans_done <= 1;
-			end
-		end
-		
-		cdd_trans_next <= 0;
-		cdd_comm_rdy <= 0;
-		if (reset) begin
-			cdd_trans_next <= 0;
-			cdd_comm_rdy <= 0;
-			byte_cnt <= '0;
-		end else if (cdd_trans_start) begin
-			CDD_DATA <= CDD_STAT[0];
-			CD_COMSYNC_N <= 0;
-			byte_cnt <= 4'd0;
-			cdd_next_delay <= 11'h3FF;
-		end else if (cdd_trans_done) begin
-			HOST_COMM[byte_cnt] <= HOST_DATA;
-			CD_COMSYNC_N <= 1;
-			byte_cnt <= byte_cnt + 4'd1;
-			if (byte_cnt < 4'd11) begin
-				CDD_DATA <= CDD_STAT[byte_cnt + 4'd1];
-				cdd_next_delay <= 11'h3FF;
-			end else if (byte_cnt == 4'd11) begin
-				CDD_DATA <= 8'h00;
-				cdd_next_delay <= 11'h3FF;
-				cdd_comm_rdy <= 1;
-			end
-		end
-		
-		if (cdd_next_delay) begin
-			cdd_next_delay <= cdd_next_delay - 11'h001;
-			cdd_trans_next <= (cdd_next_delay == 11'h001);
-		end
-	end
-	
-	
-	reg [17:0] cdc_d;
-	reg        cdc_wr;
-	reg        cdc_speed;
-	reg        cdc_audio;
-	always @(posedge clk_sys) begin
-		reg [1:0] cnt = 0;
-		reg [1:0] state = 0;
-	
-		case (state)
-			0: if (cdd_download && ioctl_wr) begin
-				{cdc_audio,cdc_speed} <= ioctl_data[1:0];
-				state <= 1;
-			end
-			
-			1: if (!cdd_download) begin
-				state <= 0;
-			end else if (cdd_download && ioctl_wr) begin
-				cnt <= 0;
-				cdc_wr <= 1;
-				cdc_d[17:0] <= {cdc_audio,cdc_speed,ioctl_data[7:0],ioctl_data[15:8]};
-				state <= 2;
-			end
-			
-			2: begin
-				cnt <= cnt - 1'd1;
-				if (!cnt) begin
-					cdc_wr <= 0;
-					state <= 1;
-				end
-			end
-		endcase
-	end
+		.CD_DATA(CD_DATA),
+		.CD_CK(CD_CK),
+		.CD_AUDIO(CD_AUDIO)
+	);
 
 	//SDRAM1
 	sdram1 sdram1
@@ -913,118 +882,169 @@ module emu
 	always @(posedge clk_sys) begin
 		reg old_busy;
 		
-		old_busy <= ddr_busy[6];
-		if (bios_download && ioctl_addr[24:4] && !ioctl_addr[3:1] && ioctl_wr) ioctl_wait <= 1;
-		if (~ddr_busy[6] && old_busy) ioctl_wait <= 0;
+		old_busy <= ddr_busy[8];
+		if ((bios_download || cart_download) /*&& ioctl_addr[24:4] && !ioctl_addr[3:1]*/ && ioctl_wr) ioctl_wait <= 1;
+		if (~ddr_busy[8] && old_busy) ioctl_wait <= 0;
 	end
+	wire [24:1] IO_ADDR = cart_download ? {3'b011,ioctl_addr[21:1]} : {6'b000000,ioctl_addr[18:1]};
+	wire [15:0] IO_DATA = {ioctl_data[7:0],ioctl_data[15:8]};
+	wire        IO_WR = (bios_download | cart_download) & ioctl_wr;
 
 	parameter bit [7:0] SRAM_INIT[16] = '{8'h42,8'h61,8'h63,8'h6B,8'h55,8'h70,8'h52,8'h61,8'h6D,8'h20,8'h46,8'h6F,8'h72,8'h6D,8'h61,8'h74};
-	wire [7:0] SRAM_INIT_DATA = !ioctl_addr[15:7] ? SRAM_INIT[ioctl_addr[4:1]] : 8'h00;
-	wire       SRAM_INIT_WE = bios_download & ~|ioctl_addr[18:16] & ioctl_wr;
+	wire [ 7:0] SRAM_INIT_DATA = !ioctl_addr[15:7] ? SRAM_INIT[ioctl_addr[4:1]] : 8'h00;
+	wire        SRAM_INIT_WE = bios_download & ~|ioctl_addr[18:16] & ioctl_wr;
 	
-	wire [31:0] ddr_do[8];
-	wire        ddr_busy[8];
+	wire [31:0] ddr_do[10];
+	wire        ddr_busy[10];
 	ddram ddram
 	(
 		.*,
 		.clk(clk_ram),
 		
-		//
-		.mem0_addr('0                                         ),
-		.mem0_din ('0                                         ),
+		//CD RAM
+		.mem0_addr({ 6'b010000,   CD_RAM_A[18:1]}             ),
+		.mem0_din ({16'h0000,CD_RAM_D}                        ),
+`ifdef MISTER_DUAL_SDRAM
 		.mem0_wr  ('0                                         ),
 		.mem0_rd  (0                                          ),
+`else
+		.mem0_wr  ({2'b00,CD_RAM_WE & {2{CD_RAM_CS}}}         ),
+		.mem0_rd  (CD_RAM_RD & CD_RAM_CS                      ),
+`endif
 		.mem0_dout(ddr_do[0]                                  ),
-		.mem0_16b (0                                          ),
-		.mem0_wcen(0                                          ),
+		.mem0_16b (1                                          ),
+		.mem0_wcen(1                                          ),
 		.mem0_busy(ddr_busy[0]                                ),
 	
-		//CD RAM
-		.mem1_addr({ 9'b000010000,   CD_RAM_A[18:1]}          ),
-		.mem1_din ({16'h0000,CD_RAM_D}                        ),
-`ifdef MISTER_DUAL_SDRAM
-		.mem1_wr  ('0                                         ),
-		.mem1_rd  (0                                          ),
-`else
-		.mem1_wr  ({2'b00,CD_RAM_WE & {2{CD_RAM_CS}}}         ),
-		.mem1_rd  (CD_RAM_RD & CD_RAM_CS                      ),
-`endif
+		//CPU bus (ROM,SRAM)
+		.mem1_addr({ 5'b00000,ROM_CS_N,MEM_A[18:1]}           ),
+		.mem1_din (MEM_DO                                     ),
+		.mem1_wr  ({3'b000,~SRAM_CS_N & ~MEM_DQM_N[0]}        ),
+		.mem1_rd  ((~ROM_CS_N | ~SRAM_CS_N) & ~MEM_RD_N       ),
 		.mem1_dout(ddr_do[1]                                  ),
 		.mem1_16b (1                                          ),
-		.mem1_wcen(1                                          ),
+		.mem1_wcen(0                                          ),
 		.mem1_busy(ddr_busy[1]                                ),
 	
-		//CPU bus (ROM,SRAM)
-		.mem2_addr({ 8'b00000000,ROM_CS_N,MEM_A[18:1]}        ),
-		.mem2_din (MEM_DO                    ),
-		.mem2_wr  ({3'b000,~SRAM_CS_N & ~MEM_DQM_N[0]}        ),
-		.mem2_rd  ((~ROM_CS_N | ~SRAM_CS_N) & ~MEM_RD_N       ),
-		.mem2_dout(ddr_do[2]                                  ),
-		.mem2_16b (1                                          ),
-		.mem2_wcen(0                                          ),
-		.mem2_busy(ddr_busy[2]                                ),
-	
 		//CPU bus (RAMH)
-		.mem3_addr({ 8'b00000010,    MEM_A[19:2],1'b0}        ),
-		.mem3_din (MEM_DO                                     ),
-		.mem3_wr  ({4{~RAMH_CS_N}} & ~MEM_DQM_N               ),
-		.mem3_rd  (~RAMH_CS_N & ~MEM_RD_N                     ),
-		.mem3_dout(ddr_do[3]                                  ),
-		.mem3_16b (0                                          ),
-		.mem3_wcen(1                                          ),
-		.mem3_busy(ddr_busy[3]                                ),
+		.mem2_addr({ 5'b00010,    MEM_A[19:2],1'b0}           ),
+		.mem2_din (MEM_DO                                     ),
+		.mem2_wr  ({4{~RAMH_CS_N}} & ~MEM_DQM_N               ),
+		.mem2_rd  (~RAMH_CS_N & ~MEM_RD_N                     ),
+		.mem2_dout(ddr_do[2]                                  ),
+		.mem2_16b (0                                          ),
+		.mem2_wcen(1                                          ),
+		.mem2_busy(ddr_busy[2]                                ),
 		
 		//CPU bus (RAML)
-		.mem4_addr({ 8'b00000001,    MEM_A[19:1]}             ),
-		.mem4_din (MEM_DO                                     ),
-		.mem4_wr  ({4{~RAML_CS_N}} & ~MEM_DQM_N               ),
-		.mem4_rd  (~RAML_CS_N & ~MEM_RD_N                     ),
+		.mem3_addr({ 5'b00001,    MEM_A[19:1]}                ),
+		.mem3_din (MEM_DO                                     ),
+		.mem3_wr  ({4{~RAML_CS_N}} & ~MEM_DQM_N               ),
+		.mem3_rd  (~RAML_CS_N & ~MEM_RD_N                     ),
+		.mem3_dout(ddr_do[3]                                  ),
+		.mem3_16b (1                                          ),
+		.mem3_wcen(1                                          ),
+		.mem3_busy(ddr_busy[3]                                ),
+	
+		//VDP1 VRAM
+//`ifdef MISTER_DUAL_SDRAM
+//		.mem4_addr('0                                         ),
+//		.mem4_din ('0                                         ),
+//		.mem4_wr  ('0                                         ),
+//		.mem4_rd  (0                                          ),
+//`else
+		.mem4_addr({ 6'b001000,   VDP1_VRAM_A[18:1]}          ),
+		.mem4_din ({16'h0000,VDP1_VRAM_D}                     ),
+		.mem4_wr  ({2'b00,VDP1_VRAM_WE}                       ),
+		.mem4_rd  (VDP1_VRAM_RD                               ),
+//`endif
 		.mem4_dout(ddr_do[4]                                  ),
 		.mem4_16b (1                                          ),
 		.mem4_wcen(1                                          ),
 		.mem4_busy(ddr_busy[4]                                ),
 	
-		//VDP1 VRAM
-		.mem5_addr({ 9'b000001000,   VDP1_VRAM_A[18:1]}       ),
-		.mem5_din ({16'h0000,VDP1_VRAM_D}                     ),
-		.mem5_wr  ({2'b00,VDP1_VRAM_WE}                       ),
-		.mem5_rd  (VDP1_VRAM_RD                               ),
+		//VDP1 FB (rest)
+//`ifdef MISTER_DUAL_SDRAM
+//		.mem5_addr('0                                         ),
+//		.mem5_din ('0                                         ),
+//		.mem5_wr  ('0                                         ),
+//		.mem5_rd  (0                                          ),
+//`else
+		.mem5_addr(VDP1_A                                     ),
+		.mem5_din ({16'h0000,VDP1_D}                          ),
+		.mem5_wr  ({2'b00,VDP1_WE}                            ),
+		.mem5_rd  (VDP1_RD                                    ),
+//`endif
 		.mem5_dout(ddr_do[5]                                  ),
 		.mem5_16b (1                                          ),
 		.mem5_wcen(1                                          ),
 		.mem5_busy(ddr_busy[5]                                ),
 		
-		//BIOS ROM
-		.mem6_addr({ 9'b000000000,ioctl_addr[18:1]}           ),
-		.mem6_din ({16'h0000,ioctl_data[7:0],ioctl_data[15:8]}),
-		.mem6_wr  ({2'b00,{2{bios_download & ioctl_wr}}}      ),
-		.mem6_rd  (0                                          ),
+		//CD BUF
+		.mem6_addr({11'b10000000000,CD_BUF_ADDR}              ),
+		.mem6_din ('0                                         ),
+		.mem6_wr  ('0                                         ),
+		.mem6_rd  (CD_BUF_RD                                  ),
 		.mem6_dout(ddr_do[6]                                  ),
 		.mem6_16b (1                                          ),
 		.mem6_wcen(0                                          ),
 		.mem6_busy(ddr_busy[6]                                ),
 		
-		//SRAM backup
-		.mem7_addr({12'b000000001000,ioctl_addr[15:1]}        ),
-		.mem7_din ({24'h000000,SRAM_INIT_DATA}                ),
-		.mem7_wr  ({3'b000,SRAM_INIT_WE}                      ),
+		//CART MEM
+`ifdef DEBUG
+		.mem7_addr('0                                         ),
+		.mem7_din ('0                                         ),
+		.mem7_wr  ('0                                         ),
 		.mem7_rd  (0                                          ),
+`else
+		.mem7_addr({3'b011,CART_MEM_A}                        ),
+		.mem7_din ({16'h0000,CART_MEM_D}                      ),
+		.mem7_wr  ({2'b00,CART_MEM_WE}                        ),
+		.mem7_rd  (CART_MEM_RD                                ),
+`endif
 		.mem7_dout(ddr_do[7]                                  ),
 		.mem7_16b (1                                          ),
 		.mem7_wcen(0                                          ),
-		.mem7_busy(ddr_busy[7]                                )
+		.mem7_busy(ddr_busy[7]                                ),
+	
+		//BIOS/CART load
+		.mem8_addr(IO_ADDR                                    ),
+		.mem8_din ({16'h0000,IO_DATA}                         ),
+		.mem8_wr  ({2'b00,{2{IO_WR}}}                         ),
+		.mem8_rd  (0                                          ),
+		.mem8_dout(ddr_do[8]                                  ),
+		.mem8_16b (1                                          ),
+		.mem8_wcen(0                                          ),
+		.mem8_busy(ddr_busy[8]                                ),
+		
+		//SRAM backup
+		.mem9_addr({ 9'b000001000,ioctl_addr[15:1]}           ),
+		.mem9_din ({24'h000000,SRAM_INIT_DATA}                ),
+		.mem9_wr  ({3'b000,SRAM_INIT_WE}                      ),
+		.mem9_rd  (0                                          ),
+		.mem9_dout(ddr_do[9]                                  ),
+		.mem9_16b (1                                          ),
+		.mem9_wcen(0                                          ),
+		.mem9_busy(ddr_busy[9]                                )
 	);
-	assign VDP1_VRAM_Q = {2{ddr_do[5][15:0]}};
-	assign VDP1_VRAM_RDY = ~ddr_busy[5];
-	assign MEM_DI     = !ROM_CS_N  ? ddr_do[2] :
-							  !SRAM_CS_N ? ddr_do[2] :
-							  !RAML_CS_N ? ddr_do[4] :
-												ddr_do[3];
-	assign MEM_WAIT_N = ~(ddr_busy[2] | ddr_busy[3] | ddr_busy[4]);
+	assign VDP1_VRAM_Q = ddr_do[4][15:0];
+	assign VDP1_VRAM_RDY = ~ddr_busy[4];
+//	assign VDP1_FB_RDY = 1;
+	
+	assign MEM_DI     = !ROM_CS_N  ? ddr_do[1] :
+							  !SRAM_CS_N ? ddr_do[1] :
+							  !RAML_CS_N ? ddr_do[3] :
+												ddr_do[2];
+	assign MEM_WAIT_N = ~(ddr_busy[1] | ddr_busy[2] | ddr_busy[3]);
 
+	assign CD_BUF_DI = ddr_do[6][15:0];
+	assign CD_BUF_RDY = ~ddr_busy[6];
+	
+	assign CART_MEM_Q = ddr_do[7][15:0];
+	assign CART_MEM_RDY = ~ddr_busy[7];
 `ifndef MISTER_DUAL_SDRAM
-	assign CD_RAM_Q = ddr_do[1][15:0];
-	assign CD_RAM_RDY = ~ddr_busy[1];
+	assign CD_RAM_Q = ddr_do[0][15:0];
+	assign CD_RAM_RDY = ~ddr_busy[0];
 `endif
 
 
@@ -1079,24 +1099,174 @@ module emu
 `endif
 
 
-	//VDP1 FB
-	vdp1_fb_352x512x16 vdp1_fb0
+	//VDP1 FB (first 352x256x16 bit)
+	wire FB0_EXT_SEL = VDP1_FB0_A[9:1] >= 9'd352;
+	wire FB1_EXT_SEL = VDP1_FB1_A[9:1] >= 9'd352;
+	bit [15:0] FB0_EXT_Q;
+	bit [15:0] FB1_EXT_Q;
+	
+	bit [15:0] FB0_Q;
+	vdp1_fb_352x256x16 vdp1_fb0
 	(
 		.clock(clk_sys),
 		.address({VDP1_FB0_A[9:1],VDP1_FB0_A[17:10]}),
 		.data(VDP1_FB0_D),
-		.wren(VDP1_FB0_WE),
-		.q(VDP1_FB0_Q)
+		.wren(VDP1_FB0_WE & {2{~FB0_EXT_SEL}}),
+		.q(FB0_Q)
 	);
 
-	vdp1_fb_352x512x16 vdp1_fb1
+	bit [15:0] FB1_Q;
+	vdp1_fb_352x256x16 vdp1_fb1
 	(
 		.clock(clk_sys),
 		.address({VDP1_FB1_A[9:1],VDP1_FB1_A[17:10]}),
 		.data(VDP1_FB1_D),
-		.wren(VDP1_FB1_WE),
-		.q(VDP1_FB1_Q)
+		.wren(VDP1_FB1_WE & {2{~FB1_EXT_SEL}}),
+		.q(FB1_Q)
 	);
+	
+	assign VDP1_FB0_Q = !FB0_EXT_SEL ? FB0_Q : FB0_EXT_Q;
+	assign VDP1_FB1_Q = !FB1_EXT_SEL ? FB1_Q : FB1_EXT_Q;
+
+//`ifndef MISTER_DUAL_SDRAM
+	bit [24:1] VDP1_A;
+	bit [15:0] VDP1_D;
+	bit [ 1:0] VDP1_WE;
+	bit        VDP1_RD;
+	bit        VDP1_FB0_BUSY;
+	bit        VDP1_FB1_BUSY;
+//	bit        VDP1_VRAM_BUSY;
+	always @(posedge clk_ram) begin
+		reg vram_rd_old,fb0_rd_old,fb1_rd_old;
+		reg vram_we_old,fb0_we_old,fb1_we_old;
+		reg [1:0] VDP1_FB0_WPEND;
+		reg [1:0] VDP1_FB1_WPEND;
+//		reg [1:0] VDP1_VRAM_WPEND;
+		reg VDP1_FB0_RPEND;
+		reg VDP1_FB1_RPEND;
+//		reg VDP1_VRAM_RPEND;
+		reg [1:0] vdp1_state;
+		
+		if (reset) begin
+			VDP1_FB0_WPEND <= '0;
+			VDP1_FB1_WPEND <= '0;
+//			VDP1_VRAM_WPEND <= '0;
+			VDP1_FB0_RPEND <= 0;
+			VDP1_FB1_RPEND <= 0;
+//			VDP1_VRAM_RPEND <= 0;
+			VDP1_FB0_BUSY <= 0;
+			VDP1_FB1_BUSY <= 0;
+//			VDP1_VRAM_BUSY <= 0;
+			VDP1_WE <= '0;
+			VDP1_RD <= 0;
+			vdp1_state <= '0;
+		end else begin
+			//VDP1 FB0 (rest 160x256x16 bit)
+			fb0_rd_old <= VDP1_FB0_RD;
+			fb0_we_old <= |VDP1_FB0_WE;
+			if (((VDP1_FB0_RD && !fb0_rd_old) || (VDP1_FB0_WE && !fb0_we_old)) && FB0_EXT_SEL) begin
+				VDP1_FB0_WPEND <= VDP1_FB0_WE;  
+				VDP1_FB0_RPEND <= VDP1_FB0_RD;  
+				VDP1_FB0_BUSY <= 1;
+			end
+			
+			//VDP1 FB1 (rest 160x256x16 bit)
+			fb1_rd_old <= VDP1_FB1_RD;
+			fb1_we_old <= |VDP1_FB1_WE;
+			if (((VDP1_FB1_RD && !fb1_rd_old) || (VDP1_FB1_WE && !fb1_we_old)) && FB1_EXT_SEL) begin
+				VDP1_FB1_WPEND <= VDP1_FB1_WE;  
+				VDP1_FB1_RPEND <= VDP1_FB1_RD; 
+				VDP1_FB1_BUSY <= 1;
+			end
+		
+			//VDP1 VRAM
+//			vram_rd_old <= VDP1_VRAM_RD;
+//			vram_we_old <= |VDP1_VRAM_WE;
+//			if (((VDP1_VRAM_RD && !vram_rd_old) || (VDP1_VRAM_WE && !vram_we_old))) begin
+//				VDP1_VRAM_WPEND <= VDP1_VRAM_WE;  
+//				VDP1_VRAM_RPEND <= VDP1_VRAM_RD; 
+//				VDP1_VRAM_BUSY <= 1;
+//			end
+			
+			VDP1_WE <= '0;
+			VDP1_RD <= 0;
+			case (vdp1_state)
+				2'd0: begin
+					if ((VDP1_FB0_RD && FB0_EXT_SEL) || VDP1_FB0_RPEND) begin
+						VDP1_A <= {6'b001010,1'b0,VDP1_FB0_A[9:1],VDP1_FB0_A[17:10]};
+						VDP1_RD <= 1;
+						VDP1_FB0_RPEND <= 0; 
+						vdp1_state <= 2'd1;
+					end else if (VDP1_FB0_WPEND && !VDP1_WE) begin
+						if (!ddr_busy[5]) begin
+							VDP1_A <= {6'b001010,1'b0,VDP1_FB0_A[9:1],VDP1_FB0_A[17:10]};
+							VDP1_D <= VDP1_FB0_D;
+							VDP1_WE <= VDP1_FB0_WPEND;
+							VDP1_FB0_WPEND <= '0;
+							VDP1_FB0_BUSY <= 0;
+							vdp1_state <= 2'd0;
+						end
+					end else if ((VDP1_FB1_RD && FB1_EXT_SEL) || VDP1_FB1_RPEND) begin
+						VDP1_A <= {6'b001100,1'b0,VDP1_FB1_A[9:1],VDP1_FB1_A[17:10]};
+						VDP1_RD <= 1;
+						VDP1_FB1_RPEND <= 0; 
+						vdp1_state <= 2'd2;
+					end else if (VDP1_FB1_WPEND && !VDP1_WE) begin
+						if (!ddr_busy[5]) begin
+							VDP1_A <= {6'b001100,1'b0,VDP1_FB1_A[9:1],VDP1_FB1_A[17:10]};
+							VDP1_D <= VDP1_FB1_D;
+							VDP1_WE <= VDP1_FB1_WPEND;
+							VDP1_FB1_WPEND <= '0;
+							VDP1_FB1_BUSY <= 0;
+							vdp1_state <= 2'd0;
+						end
+//					end else if (VDP1_VRAM_RD || VDP1_VRAM_RPEND) begin
+//						VDP1_A <= {6'b001000,VDP1_VRAM_A[18:1]};
+//						VDP1_RD <= 1;
+//						VDP1_VRAM_RPEND <= 0; 
+//						vdp1_state <= 2'd3;
+//					end else if (VDP1_VRAM_WPEND && !VDP1_WE) begin
+//						if (!ddr_busy[5]) begin
+//							VDP1_A <= {6'b001000,VDP1_VRAM_A[18:1]};
+//							VDP1_D <= VDP1_VRAM_D;
+//							VDP1_WE <= VDP1_VRAM_WPEND;
+//							VDP1_VRAM_WPEND <= '0;
+//							VDP1_VRAM_BUSY <= 0;
+//							vdp1_state <= 2'd0;
+//						end
+					end
+				end
+				
+				2'd1: begin
+					if (!ddr_busy[5] && !VDP1_RD) begin
+						FB0_EXT_Q <= ddr_do[5][15:0];
+						VDP1_FB0_BUSY <= 0;
+						vdp1_state <= 2'd0;
+					end
+				end
+				
+				2'd2: begin
+					if (!ddr_busy[5] && !VDP1_RD) begin
+						FB1_EXT_Q <= ddr_do[5][15:0];
+						VDP1_FB1_BUSY <= 0;
+						vdp1_state <= 2'd0;
+					end
+				end
+				
+//				2'd3: begin
+//					if (!ddr_busy[4] && !VDP1_RD) begin
+//						VDP1_VRAM_Q <= ddr_do[4][15:0];
+//						VDP1_VRAM_BUSY <= 0;
+//						vdp1_state <= 2'd0;
+//					end
+//				end
+			endcase
+		end
+	end
+//	assign VDP1_VRAM_RDY = ~VDP1_VRAM_BUSY;
+	assign VDP1_FB_RDY = ~(VDP1_FB0_BUSY | VDP1_FB1_BUSY);
+//`endif
+
 
 
 	wire PAL = (area_code >= 4'hA);//status[7];
@@ -1133,22 +1303,14 @@ module emu
 	wire [2:0] scale = status[3:1];
 	wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
 	
-	assign CLK_VIDEO = clk_ram;
+	assign CLK_VIDEO = clk_sys;
 	assign VGA_SL = {~INTERLACE,~INTERLACE} & sl[1:0];
-	
-//	reg [7:0] RS,GS,BS;
-	reg DCLK_OLD;
-	always @(posedge CLK_VIDEO) begin
-//		{RS,GS,BS} <= {R,G,B};
-		DCLK_OLD <= DCLK;
-	end
-	wire ce_pix = DCLK & ~DCLK_OLD;
 	
 	video_mixer #(.LINE_LENGTH((352*2)+8), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 	(
 		.*,
 	
-		.ce_pix(ce_pix),	
+		.ce_pix(DCLK),	
 		.scandoubler(~INTERLACE && (scale || forced_scandoubler)),
 		.hq2x(scale==1),	
 		.freeze_sync(),
@@ -1166,16 +1328,13 @@ module emu
 
 
 	//debug
-	reg  [6:0] SCRN_EN = 7'b1111111;
+	reg  [7:0] SCRN_EN = 8'b11111111;
 	reg  [2:0] SND_EN = 3'b111;
 	reg        DBG_PAUSE = 0;
 	reg        DBG_BREAK = 0;
 	reg        DBG_RUN = 0;
 	
-	reg        H320_END_INC = 0;
-	reg        H320_END_DEC = 0;
-	reg        H352_END_INC = 0;
-	reg        H352_END_DEC = 0;
+	reg  [3:0] DBG_EXT = '0;
 	
 	wire       pressed = ps2_key[9];
 	wire [8:0] code    = ps2_key[8:0];
@@ -1183,10 +1342,7 @@ module emu
 		reg old_state = 0;
 	
 		DBG_RUN <= 0;
-		H320_END_INC <= 0;
-		H320_END_DEC <= 0;
-		H352_END_INC <= 0;
-		H352_END_DEC <= 0;
+		DBG_EXT <= '0;
 		
 		old_state <= ps2_key[10];
 		if((ps2_key[10] != old_state) && pressed) begin
@@ -1206,21 +1362,29 @@ module emu
 //				'h009: begin DBG_BREAK <= ~DBG_BREAK; end 	// F10
 //				'h078: begin DBG_RUN <= 1; end 	// F11
 				'h177: begin DBG_PAUSE <= ~DBG_PAUSE; end 	// Pause
-				'h016: begin H320_END_DEC <= 1; end 	// 1
-				'h01E: begin H320_END_INC <= 1; end 	// 2
-				'h026: begin H352_END_DEC <= 1; end 	// 3
-				'h025: begin H352_END_INC <= 1; end 	// 4
 `endif
+			endcase
+		end
+		
+		if(pressed) begin
+			casex(code)
+`ifdef DEBUG
+				'h016: begin DBG_EXT[0] <= 1; end 	// 1
+				'h01E: begin DBG_EXT[1] <= 1; end 	// 2
+				'h026: begin DBG_EXT[2] <= 1; end 	// 3
+				'h025: begin DBG_EXT[3] <= 1; end 	// 4
+`endif
+				default:;
 			endcase
 		end
 	end
 	
 	
-	reg  [6:0] SCRN_EN2 = 7'b1111111;
+	reg  [7:0] SCRN_EN2 = 8'b11111111;
 	reg  [2:0] SND_EN2 = 3'b111;
 `ifndef DEBUG
-	assign SCRN_EN2 = ~status[41:36];
-	assign SND_EN2 = ~status[44:42];
+	assign SCRN_EN2 = ~status[42:36];
+	assign SND_EN2 = ~status[45:43];
 `endif
 
 endmodule

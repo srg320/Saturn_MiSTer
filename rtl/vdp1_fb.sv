@@ -1,4 +1,4 @@
-module vdp1_fb_352x512x16
+module vdp1_fb_352x256x16
 (
 	input             clock,
 	input      [16:0] address,

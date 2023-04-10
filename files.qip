@@ -4,14 +4,16 @@ set_global_assignment -name QIP_FILE ../SH/SH7034/SH7034.qip
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/SH_mem.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/SH7604_mem.sv
 set_global_assignment -name QIP_FILE ../Saturn/Saturn.qip
-set_global_assignment -name VERILOG_FILE rtl/hps_ext.v
 set_global_assignment -name VHDL_FILE rtl/CEGen.vhd
 set_global_assignment -name VHDL_FILE rtl/bram.vhd
 set_global_assignment -name VHDL_FILE rtl/mlab.vhd
+set_global_assignment -name VERILOG_FILE rtl/hps_ext.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sdram1.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sdram2.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/ddram.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/vdp1_fb.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/hps2pad.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/hps2cdd.sv
 set_global_assignment -name SDC_FILE Saturn.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE Saturn.sv
 
