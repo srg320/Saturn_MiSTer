@@ -474,7 +474,8 @@ module emu
 	end 
 	
 	
-	wire reset = RESET | status[0] | buttons[1] | bios_download;
+	wire reset = RESET | status[0] | buttons[1];
+	wire rst_sys = reset | bios_download;
 	
 	wire  [3:0] area_code = status[35:33] == 3'd0 ? 4'h1 :	//Japan area
 									status[35:33] == 3'd1 ? 4'h2 :	//Asia NTSC area
@@ -640,8 +641,8 @@ module emu
 	
 	Saturn saturn
 	(
-		.RST_N(~reset),
 		.CLK(clk_sys),
+		.RST_N(~rst_sys),
 		.EN(~DBG_PAUSE),
 		
 		.SYS_CE_F(SYS_CE_F),
@@ -772,7 +773,7 @@ module emu
 	HPS2PAD PAD
 	(
 		.CLK(clk_sys),
-		.RST_N(~reset),
+		.RST_N(~rst_sys),
 		.SMPC_CE(SMPC_CE),
 		
 		.PDR1I(SMPC_PDR1I),
@@ -809,7 +810,7 @@ module emu
 	wire        CD_BUF_RDY;
 	HPS2CDD CDD (
 		.CLK(clk_sys),
-		.RST_N(~reset),
+		.RST_N(~rst_sys),
 		
 		.EXT_BUS(EXT_BUS),
 		
@@ -900,6 +901,7 @@ module emu
 	(
 		.*,
 		.clk(clk_ram),
+		.rst(reset),
 		
 		//CD RAM
 		.mem0_addr({ 6'b010000,   CD_RAM_A[18:1]}             ),
@@ -1135,28 +1137,22 @@ module emu
 	bit        VDP1_RD;
 	bit        VDP1_FB0_BUSY;
 	bit        VDP1_FB1_BUSY;
-//	bit        VDP1_VRAM_BUSY;
 	always @(posedge clk_ram) begin
 		reg vram_rd_old,fb0_rd_old,fb1_rd_old;
 		reg vram_we_old,fb0_we_old,fb1_we_old;
 		reg [1:0] VDP1_FB0_WPEND;
 		reg [1:0] VDP1_FB1_WPEND;
-//		reg [1:0] VDP1_VRAM_WPEND;
 		reg VDP1_FB0_RPEND;
 		reg VDP1_FB1_RPEND;
-//		reg VDP1_VRAM_RPEND;
 		reg [1:0] vdp1_state;
 		
-		if (reset) begin
+		if (rst_sys) begin
 			VDP1_FB0_WPEND <= '0;
 			VDP1_FB1_WPEND <= '0;
-//			VDP1_VRAM_WPEND <= '0;
 			VDP1_FB0_RPEND <= 0;
 			VDP1_FB1_RPEND <= 0;
-//			VDP1_VRAM_RPEND <= 0;
 			VDP1_FB0_BUSY <= 0;
 			VDP1_FB1_BUSY <= 0;
-//			VDP1_VRAM_BUSY <= 0;
 			VDP1_WE <= '0;
 			VDP1_RD <= 0;
 			vdp1_state <= '0;
@@ -1178,15 +1174,6 @@ module emu
 				VDP1_FB1_RPEND <= VDP1_FB1_RD; 
 				VDP1_FB1_BUSY <= 1;
 			end
-		
-			//VDP1 VRAM
-//			vram_rd_old <= VDP1_VRAM_RD;
-//			vram_we_old <= |VDP1_VRAM_WE;
-//			if (((VDP1_VRAM_RD && !vram_rd_old) || (VDP1_VRAM_WE && !vram_we_old))) begin
-//				VDP1_VRAM_WPEND <= VDP1_VRAM_WE;  
-//				VDP1_VRAM_RPEND <= VDP1_VRAM_RD; 
-//				VDP1_VRAM_BUSY <= 1;
-//			end
 			
 			VDP1_WE <= '0;
 			VDP1_RD <= 0;
@@ -1220,20 +1207,6 @@ module emu
 							VDP1_FB1_BUSY <= 0;
 							vdp1_state <= 2'd0;
 						end
-//					end else if (VDP1_VRAM_RD || VDP1_VRAM_RPEND) begin
-//						VDP1_A <= {6'b001000,VDP1_VRAM_A[18:1]};
-//						VDP1_RD <= 1;
-//						VDP1_VRAM_RPEND <= 0; 
-//						vdp1_state <= 2'd3;
-//					end else if (VDP1_VRAM_WPEND && !VDP1_WE) begin
-//						if (!ddr_busy[5]) begin
-//							VDP1_A <= {6'b001000,VDP1_VRAM_A[18:1]};
-//							VDP1_D <= VDP1_VRAM_D;
-//							VDP1_WE <= VDP1_VRAM_WPEND;
-//							VDP1_VRAM_WPEND <= '0;
-//							VDP1_VRAM_BUSY <= 0;
-//							vdp1_state <= 2'd0;
-//						end
 					end
 				end
 				
@@ -1252,18 +1225,9 @@ module emu
 						vdp1_state <= 2'd0;
 					end
 				end
-				
-//				2'd3: begin
-//					if (!ddr_busy[4] && !VDP1_RD) begin
-//						VDP1_VRAM_Q <= ddr_do[4][15:0];
-//						VDP1_VRAM_BUSY <= 0;
-//						vdp1_state <= 2'd0;
-//					end
-//				end
 			endcase
 		end
 	end
-//	assign VDP1_VRAM_RDY = ~VDP1_VRAM_BUSY;
 	assign VDP1_FB_RDY = ~(VDP1_FB0_BUSY | VDP1_FB1_BUSY);
 //`endif
 
@@ -1276,7 +1240,7 @@ module emu
 		reg old_pal;
 		int to;
 		
-		if(!reset) begin
+		if(!rst_sys) begin
 			old_pal <= PAL;
 			if(old_pal != PAL) to <= 5000000;
 		end

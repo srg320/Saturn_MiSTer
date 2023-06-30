@@ -34,6 +34,7 @@ module ddram
 	output        DDRAM_WE,
 	
 	input         clk,
+	input         rst,
 
 	input  [24:1] mem0_addr,
 	output [31:0] mem0_dout,
@@ -132,265 +133,85 @@ reg  [  7:  0] ram_ba;
 reg  [  7:  0] ram_burst;
 reg            ram_read = 0;
 reg            ram_write = 0;
+reg  [  3:  0] ram_chan;
 
 reg  [ 24:  1] rcache_addr[10] = '{10{'1}};
 reg  [127:  0] rcache_buf[10];
 reg            rcache_word[10];
-reg  [ 24:  1] wcache_addr[10] = '{10{'1}};
-reg  [ 15:  0] wcache_be[10] = '{10{'0}};
-reg  [127:  0] wcache_buf[10];
+reg            rcache_update[10];
 reg  [ 24:  1] write_addr[10];
-reg  [127:  0] write_buf[10];
-reg  [ 15:  0] write_be[10];
+reg  [ 63:  0] write_buf[10];
+reg  [  7:  0] write_be[10];
 
 reg            read_busy[10] = '{10{0}};
-reg  [  1:  0] write_busy[10] = '{10{'0}};
+reg            write_busy[10] = '{10{0}};
 
 wire           mem_rd[10] = '{mem0_rd,mem1_rd,mem2_rd,mem3_rd,mem4_rd,mem5_rd,mem6_rd,mem7_rd,mem8_rd,mem9_rd};
 wire [  3:  0] mem_wr[10] = '{mem0_wr,mem1_wr,mem2_wr,mem3_wr,mem4_wr,mem5_wr,mem6_wr,mem7_wr,mem8_wr,mem9_wr};
 wire [ 24:  1] mem_addr[10] = '{mem0_addr,mem1_addr,mem2_addr,mem3_addr,mem4_addr,mem5_addr,mem6_addr,mem7_addr,mem8_addr,mem9_addr};
 wire           mem_16b[10] = '{mem0_16b,mem1_16b,mem2_16b,mem3_16b,mem4_16b,mem5_16b,mem6_16b,mem7_16b,mem8_16b,mem9_16b};
 wire [ 31:  0] mem_din[10] = '{mem0_din,mem1_din,mem2_din,mem3_din,mem4_din,mem5_din,mem6_din,mem7_din,mem8_din,mem9_din};
-wire           mem_wcen[10] = '{mem0_wcen,mem1_wcen,mem2_wcen,mem3_wcen,mem4_wcen,mem5_wcen,mem6_wcen,mem7_wcen,mem8_wcen,mem9_wcen};
+//wire           mem_wcen[10] = '{mem0_wcen,mem1_wcen,mem2_wcen,mem3_wcen,mem4_wcen,mem5_wcen,mem6_wcen,mem7_wcen,mem8_wcen,mem9_wcen};
 wire [ 31:  0] mem_dout[10];
 wire           mem_busy[10];
 
 reg  [  2:  0] state = 0;
 
+reg  [  1:  0] cache_wraddr;
+reg            cache_update;
+
 always @(posedge clk) begin
 	bit old_rd[10], old_we[10];
 	bit write,read;
-	bit [3:0] chan,ram_chan;
+	bit [3:0] chan;
 
 	for (int i=0; i<10; i++) begin
 		old_rd[i] <= mem_rd[i];
 		old_we[i] <= |mem_wr[i];
-		if (mem_rd[i] && !old_rd[i]) begin
-			if (rcache_addr[i][24:4] != mem_addr[i][24:4]) begin
+		if (rst) begin
+			rcache_addr[i] <= '1;
+			read_busy[i] <= 0;
+		end
+		else if (mem_rd[i] && !old_rd[i]) begin
+			if (rcache_addr[i][24:5] != mem_addr[i][24:5]) begin
 				read_busy[i] <= 1;
 			end
 			rcache_addr[i] <= mem_addr[i];
 			rcache_word[i] <= mem_16b[i];
-			if (wcache_addr[i][24:4] == mem_addr[i][24:4] && wcache_be[i] && mem_wcen[i]) begin
-				write_addr[i] <= wcache_addr[i];
-				write_buf[i] <= wcache_buf[i];
-				write_be[i] <= wcache_be[i];
-				wcache_be[i] <= '0;
-				write_busy[i] <= {|wcache_be[i][15:8],|wcache_be[i][7:0]};
-				read_busy[i] <= 1;
-			end
 		end
-		if (|mem_wr[i] && !old_we[i]) begin
-			if (mem_wcen[i]) begin
-				if (wcache_addr[i][24:4] != mem_addr[i][24:4]) begin
-					if (wcache_be[i]) begin
-						write_addr[i] <= wcache_addr[i];
-						write_buf[i] <= wcache_buf[i];
-						write_be[i] <= wcache_be[i];
-						write_busy[i] <= {|wcache_be[i][15:8],|wcache_be[i][7:0]};
-					end
-					wcache_addr[i] <= mem_addr[i];
-					wcache_be[i] <= '0;
-				end 
-				
-				if (mem_16b[i]) 
-					case (mem_addr[i][3:1])
-						3'b000: begin
-							if (mem_wr[i][1]) begin wcache_buf[i][127:120] <= mem_din[i][15:8]; wcache_be[i][15] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][119:112] <= mem_din[i][ 7:0]; wcache_be[i][14] <= 1; end
-						end
-						3'b001: begin
-							if (mem_wr[i][1]) begin wcache_buf[i][111:104] <= mem_din[i][15:8]; wcache_be[i][13] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][103:096] <= mem_din[i][ 7:0]; wcache_be[i][12] <= 1; end
-						end
-						3'b010: begin
-							if (mem_wr[i][1]) begin wcache_buf[i][095:088] <= mem_din[i][15:8]; wcache_be[i][11] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][087:080] <= mem_din[i][ 7:0]; wcache_be[i][10] <= 1; end
-						end
-						3'b011: begin
-							if (mem_wr[i][1]) begin wcache_buf[i][079:072] <= mem_din[i][15:8]; wcache_be[i][ 9] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][071:064] <= mem_din[i][ 7:0]; wcache_be[i][ 8] <= 1; end
-						end
-						3'b100: begin
-							if (mem_wr[i][1]) begin wcache_buf[i][063:056] <= mem_din[i][15:8]; wcache_be[i][ 7] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][055:048] <= mem_din[i][ 7:0]; wcache_be[i][ 6] <= 1; end
-						end
-						3'b101: begin
-							if (mem_wr[i][1]) begin wcache_buf[i][047:040] <= mem_din[i][15:8]; wcache_be[i][ 5] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][039:032] <= mem_din[i][ 7:0]; wcache_be[i][ 4] <= 1; end
-						end
-						3'b110: begin
-							if (mem_wr[i][1]) begin wcache_buf[i][031:024] <= mem_din[i][15:8]; wcache_be[i][ 3] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][023:016] <= mem_din[i][ 7:0]; wcache_be[i][ 2] <= 1; end
-						end
-						3'b111: begin
-							if (mem_wr[i][1]) begin wcache_buf[i][015:008] <= mem_din[i][15:8]; wcache_be[i][ 1] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][007:000] <= mem_din[i][ 7:0]; wcache_be[i][ 0] <= 1; end
-						end
-					endcase
-				else
-					case (mem_addr[i][3:2])
-						2'b00: begin
-							if (mem_wr[i][3]) begin wcache_buf[i][127:120] <= mem_din[i][31:24]; wcache_be[i][15] <= 1; end
-							if (mem_wr[i][2]) begin wcache_buf[i][119:112] <= mem_din[i][23:16]; wcache_be[i][14] <= 1; end
-							if (mem_wr[i][1]) begin wcache_buf[i][111:104] <= mem_din[i][15: 8]; wcache_be[i][13] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][103:096] <= mem_din[i][ 7: 0]; wcache_be[i][12] <= 1; end
-						end
-						2'b01: begin
-							if (mem_wr[i][3]) begin wcache_buf[i][095:088] <= mem_din[i][31:24]; wcache_be[i][11] <= 1; end
-							if (mem_wr[i][2]) begin wcache_buf[i][087:080] <= mem_din[i][23:16]; wcache_be[i][10] <= 1; end
-							if (mem_wr[i][1]) begin wcache_buf[i][079:072] <= mem_din[i][15: 8]; wcache_be[i][ 9] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][071:064] <= mem_din[i][ 7: 0]; wcache_be[i][ 8] <= 1; end
-						end
-						2'b10: begin
-							if (mem_wr[i][3]) begin wcache_buf[i][063:056] <= mem_din[i][31:24]; wcache_be[i][ 7] <= 1; end
-							if (mem_wr[i][2]) begin wcache_buf[i][055:048] <= mem_din[i][23:16]; wcache_be[i][ 6] <= 1; end
-							if (mem_wr[i][1]) begin wcache_buf[i][047:040] <= mem_din[i][15: 8]; wcache_be[i][ 5] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][039:032] <= mem_din[i][ 7: 0]; wcache_be[i][ 4] <= 1; end
-						end
-						2'b11: begin
-							if (mem_wr[i][3]) begin wcache_buf[i][031:024] <= mem_din[i][31:24]; wcache_be[i][ 3] <= 1; end
-							if (mem_wr[i][2]) begin wcache_buf[i][023:016] <= mem_din[i][23:16]; wcache_be[i][ 2] <= 1; end
-							if (mem_wr[i][1]) begin wcache_buf[i][015:008] <= mem_din[i][15: 8]; wcache_be[i][ 1] <= 1; end
-							if (mem_wr[i][0]) begin wcache_buf[i][007:000] <= mem_din[i][ 7: 0]; wcache_be[i][ 0] <= 1; end
-						end
-					endcase
+		
+		if (rst) begin
+			write_busy[i] <= 0;
+		end
+		else if (|mem_wr[i] && !old_we[i]) begin
+			write_addr[i] <= mem_addr[i];
+			write_busy[i] <= 1;
+			if (mem_16b[i]) begin
+				write_buf[i] <= {4{mem_din[i][15:0]}};
+				case (mem_addr[i][2:1])
+					2'b00: write_be[i] <= {mem_wr[i][1:0],6'b000000};
+					2'b01: write_be[i] <= {2'b00,mem_wr[i][1:0],4'b0000};
+					2'b10: write_be[i] <= {4'b0000,mem_wr[i][1:0],2'b00};
+					2'b11: write_be[i] <= {6'b000000,mem_wr[i][1:0]};
+				endcase
 			end else begin
-				write_addr[i] <= mem_addr[i];
-				write_be[i] <= '0;
-				write_busy[i] <= '0;
-				if (mem_16b[i]) 
-					case (mem_addr[i][3:1])
-						3'b000: begin
-							if (mem_wr[i][1]) begin write_buf[i][127:120] <= mem_din[i][15:8]; write_be[i][15] <= 1; write_busy[i][1] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][119:112] <= mem_din[i][ 7:0]; write_be[i][14] <= 1; write_busy[i][1] <= 1; end
-						end
-						3'b001: begin
-							if (mem_wr[i][1]) begin write_buf[i][111:104] <= mem_din[i][15:8]; write_be[i][13] <= 1; write_busy[i][1] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][103:096] <= mem_din[i][ 7:0]; write_be[i][12] <= 1; write_busy[i][1] <= 1; end
-						end
-						3'b010: begin
-							if (mem_wr[i][1]) begin write_buf[i][095:088] <= mem_din[i][15:8]; write_be[i][11] <= 1; write_busy[i][1] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][087:080] <= mem_din[i][ 7:0]; write_be[i][10] <= 1; write_busy[i][1] <= 1; end
-						end
-						3'b011: begin
-							if (mem_wr[i][1]) begin write_buf[i][079:072] <= mem_din[i][15:8]; write_be[i][ 9] <= 1; write_busy[i][1] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][071:064] <= mem_din[i][ 7:0]; write_be[i][ 8] <= 1; write_busy[i][1] <= 1; end
-						end
-						3'b100: begin
-							if (mem_wr[i][1]) begin write_buf[i][063:056] <= mem_din[i][15:8]; write_be[i][ 7] <= 1; write_busy[i][0] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][055:048] <= mem_din[i][ 7:0]; write_be[i][ 6] <= 1; write_busy[i][0] <= 1; end
-						end
-						3'b101: begin
-							if (mem_wr[i][1]) begin write_buf[i][047:040] <= mem_din[i][15:8]; write_be[i][ 5] <= 1; write_busy[i][0] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][039:032] <= mem_din[i][ 7:0]; write_be[i][ 4] <= 1; write_busy[i][0] <= 1; end
-						end
-						3'b110: begin
-							if (mem_wr[i][1]) begin write_buf[i][031:024] <= mem_din[i][15:8]; write_be[i][ 3] <= 1; write_busy[i][0] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][023:016] <= mem_din[i][ 7:0]; write_be[i][ 2] <= 1; write_busy[i][0] <= 1; end
-						end
-						3'b111: begin
-							if (mem_wr[i][1]) begin write_buf[i][015:008] <= mem_din[i][15:8]; write_be[i][ 1] <= 1; write_busy[i][0] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][007:000] <= mem_din[i][ 7:0]; write_be[i][ 0] <= 1; write_busy[i][0] <= 1; end
-						end
-					endcase
-				else
-					case (mem_addr[i][3:2])
-						2'b00: begin
-							if (mem_wr[i][3]) begin write_buf[i][127:120] <= mem_din[i][31:24]; write_be[i][15] <= 1; write_busy[i][1] <= 1; end
-							if (mem_wr[i][2]) begin write_buf[i][119:112] <= mem_din[i][23:16]; write_be[i][14] <= 1; write_busy[i][1] <= 1; end
-							if (mem_wr[i][1]) begin write_buf[i][111:104] <= mem_din[i][15: 8]; write_be[i][13] <= 1; write_busy[i][1] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][103:096] <= mem_din[i][ 7: 0]; write_be[i][12] <= 1; write_busy[i][1] <= 1; end
-						end
-						2'b01: begin
-							if (mem_wr[i][3]) begin write_buf[i][095:088] <= mem_din[i][31:24]; write_be[i][11] <= 1; write_busy[i][1] <= 1; end
-							if (mem_wr[i][2]) begin write_buf[i][087:080] <= mem_din[i][23:16]; write_be[i][10] <= 1; write_busy[i][1] <= 1; end
-							if (mem_wr[i][1]) begin write_buf[i][079:072] <= mem_din[i][15: 8]; write_be[i][ 9] <= 1; write_busy[i][1] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][071:064] <= mem_din[i][ 7: 0]; write_be[i][ 8] <= 1; write_busy[i][1] <= 1; end
-						end
-						2'b10: begin
-							if (mem_wr[i][3]) begin write_buf[i][063:056] <= mem_din[i][31:24]; write_be[i][ 7] <= 1; write_busy[i][0] <= 1; end
-							if (mem_wr[i][2]) begin write_buf[i][055:048] <= mem_din[i][23:16]; write_be[i][ 6] <= 1; write_busy[i][0] <= 1; end
-							if (mem_wr[i][1]) begin write_buf[i][047:040] <= mem_din[i][15: 8]; write_be[i][ 5] <= 1; write_busy[i][0] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][039:032] <= mem_din[i][ 7: 0]; write_be[i][ 4] <= 1; write_busy[i][0] <= 1; end
-						end
-						2'b11: begin
-							if (mem_wr[i][3]) begin write_buf[i][031:024] <= mem_din[i][31:24]; write_be[i][ 3] <= 1; write_busy[i][0] <= 1; end
-							if (mem_wr[i][2]) begin write_buf[i][023:016] <= mem_din[i][23:16]; write_be[i][ 2] <= 1; write_busy[i][0] <= 1; end
-							if (mem_wr[i][1]) begin write_buf[i][015:008] <= mem_din[i][15: 8]; write_be[i][ 1] <= 1; write_busy[i][0] <= 1; end
-							if (mem_wr[i][0]) begin write_buf[i][007:000] <= mem_din[i][ 7: 0]; write_be[i][ 0] <= 1; write_busy[i][0] <= 1; end
-						end
-					endcase
+				write_buf[i] <= {2{mem_din[i]}};
+				case (mem_addr[i][2])
+					1'b0: write_be[i] <= {mem_wr[i][3:0],4'b0000};
+					1'b1: write_be[i] <= {4'b0000,mem_wr[i][3:0]};
+				endcase
 			end
 			
-			if (rcache_addr[i][24:4] == mem_addr[i][24:4]) begin
-				if (mem_16b[i]) 
-					case (mem_addr[i][3:1])
-						3'b000: begin
-							if (mem_wr[i][1]) begin rcache_buf[i][127:120] <= mem_din[i][15:8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][119:112] <= mem_din[i][ 7:0]; end
-						end
-						3'b001: begin
-							if (mem_wr[i][1]) begin rcache_buf[i][111:104] <= mem_din[i][15:8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][103:096] <= mem_din[i][ 7:0]; end
-						end
-						3'b010: begin
-							if (mem_wr[i][1]) begin rcache_buf[i][095:088] <= mem_din[i][15:8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][087:080] <= mem_din[i][ 7:0]; end
-						end
-						3'b011: begin
-							if (mem_wr[i][1]) begin rcache_buf[i][079:072] <= mem_din[i][15:8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][071:064] <= mem_din[i][ 7:0]; end
-						end
-						3'b100: begin
-							if (mem_wr[i][1]) begin rcache_buf[i][063:056] <= mem_din[i][15:8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][055:048] <= mem_din[i][ 7:0]; end
-						end
-						3'b101: begin
-							if (mem_wr[i][1]) begin rcache_buf[i][047:040] <= mem_din[i][15:8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][039:032] <= mem_din[i][ 7:0]; end
-						end
-						3'b110: begin
-							if (mem_wr[i][1]) begin rcache_buf[i][031:024] <= mem_din[i][15:8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][023:016] <= mem_din[i][ 7:0]; end
-						end
-						3'b111: begin
-							if (mem_wr[i][1]) begin rcache_buf[i][015:008] <= mem_din[i][15:8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][007:000] <= mem_din[i][ 7:0]; end
-						end
-					endcase
-				else
-					case (mem_addr[i][3:2])
-						2'b00: begin
-							if (mem_wr[i][3]) begin rcache_buf[i][127:120] <= mem_din[i][31:24]; end
-							if (mem_wr[i][2]) begin rcache_buf[i][119:112] <= mem_din[i][23:16]; end
-							if (mem_wr[i][1]) begin rcache_buf[i][111:104] <= mem_din[i][15: 8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][103:096] <= mem_din[i][ 7: 0]; end
-						end
-						2'b01: begin
-							if (mem_wr[i][3]) begin rcache_buf[i][095:088] <= mem_din[i][31:24]; end
-							if (mem_wr[i][2]) begin rcache_buf[i][087:080] <= mem_din[i][23:16]; end
-							if (mem_wr[i][1]) begin rcache_buf[i][079:072] <= mem_din[i][15: 8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][071:064] <= mem_din[i][ 7: 0]; end
-						end
-						2'b10: begin
-							if (mem_wr[i][3]) begin rcache_buf[i][063:056] <= mem_din[i][31:24]; end
-							if (mem_wr[i][2]) begin rcache_buf[i][055:048] <= mem_din[i][23:16]; end
-							if (mem_wr[i][1]) begin rcache_buf[i][047:040] <= mem_din[i][15: 8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][039:032] <= mem_din[i][ 7: 0]; end
-						end
-						2'b11: begin
-							if (mem_wr[i][3]) begin rcache_buf[i][031:024] <= mem_din[i][31:24]; end
-							if (mem_wr[i][2]) begin rcache_buf[i][023:016] <= mem_din[i][23:16]; end
-							if (mem_wr[i][1]) begin rcache_buf[i][015:008] <= mem_din[i][15: 8]; end
-							if (mem_wr[i][0]) begin rcache_buf[i][007:000] <= mem_din[i][ 7: 0]; end
-						end
-					endcase
-			end
+			rcache_update[i] <= (rcache_addr[i][24:5] == mem_addr[i][24:5]);
 		end
 	end
-
-	if(!DDRAM_BUSY) begin
+	
+	if (rst) begin
+		state <= '0;
+		ram_write <= 0;
+		ram_read  <= 0;
+	end
+	else if(!DDRAM_BUSY) begin
 		ram_write <= 0;
 		ram_read  <= 0;
 
@@ -421,67 +242,77 @@ always @(posedge clk) begin
 				else if (read_busy[9])  begin read = 1;  chan = 4'h9; end
 				
 				if (write) begin
-					ram_address <= write_busy[chan][1] ? {write_addr[chan][24:4],3'b000} : {write_addr[chan][24:4],3'b100};
-					ram_din		<= write_busy[chan][1] ? write_buf[chan][127:64]         : write_buf[chan][63:0];
-					ram_ba      <= write_busy[chan][1] ? write_be[chan][15:8]            : write_be[chan][7:0];
+					ram_address <= {write_addr[chan][24:3],2'b00};
+					ram_din		<= write_buf[chan];
+					ram_ba      <= write_be[chan];
 					ram_write 	<= 1;
 					ram_burst   <= 1;
 					ram_chan    <= chan;
+					cache_wraddr<= write_addr[chan][4:3];
+					cache_update<= rcache_update[chan];
+					write_busy[chan] <= 0;
 					state       <= 3'h1;
 				end
 				if (read) begin
-					ram_address <= {rcache_addr[chan][24:4],3'b000};
+					ram_address <= {rcache_addr[chan][24:5],4'b0000};
 					ram_ba      <= 8'hFF;
 					ram_read    <= 1;
-					ram_burst   <= 2;
+					ram_burst   <= 4;
 					ram_chan    <= chan;
+					cache_wraddr <= '0;
 					state       <= 3'h2;
 				end
 			end
 
 			3'h1: begin
-				for (int i=0; i<10; i++) begin
-					if (ram_chan == i) if (write_busy[i][1]) write_busy[i][1] <= 0;
-					                   else                  write_busy[i][0] <= 0;
-				end
+				cache_update <= 0;
 				state <= 0;
 			end
 		
 			3'h2: if (DDRAM_DOUT_READY) begin
 				for (int i=0; i<10; i++) begin
-					if (ram_chan == i) rcache_buf[i][127:64] <= DDRAM_DOUT;
+					cache_wraddr <= cache_wraddr + 2'd1;
+					if (cache_wraddr == 2'd3) begin
+						read_busy[ram_chan] <= 0;
+						state <= 0;
+					end
 				end
-				state <= 3'h3;
-			end
-
-			3'h3: if (DDRAM_DOUT_READY) begin
-				for (int i=0; i<10; i++) begin
-					if (ram_chan == i) rcache_buf[i][63:0] <= DDRAM_DOUT;
-					if (ram_chan == i) read_busy[i] <= 0;
-				end
-				state <= 0;
 			end
 		endcase
 	end
 end
 
+
+wire [ 63:  0] cache_data = state == 3'h1 ? write_buf[ram_chan] : DDRAM_DOUT; 
+wire [  7:  0] cache_be = state == 3'h1 ? write_be[ram_chan] : 8'hFF; 
+wire           cache_wren = (state == 3'h1 ? cache_update : state == 3'h2 ? DDRAM_DOUT_READY : 1'b0) && !DDRAM_BUSY;
+wire [ 63:  0] cache_q[10];
+
+ddr_cache_ram cache0 (clk, cache_wraddr, cache_data, cache_be, cache_wren & ram_chan == 0, rcache_addr[0][4:3], cache_q[0]);
+ddr_cache_ram cache1 (clk, cache_wraddr, cache_data, cache_be, cache_wren & ram_chan == 1, rcache_addr[1][4:3], cache_q[1]);
+ddr_cache_ram cache2 (clk, cache_wraddr, cache_data, cache_be, cache_wren & ram_chan == 2, rcache_addr[2][4:3], cache_q[2]);
+ddr_cache_ram cache3 (clk, cache_wraddr, cache_data, cache_be, cache_wren & ram_chan == 3, rcache_addr[3][4:3], cache_q[3]);
+ddr_cache_ram cache4 (clk, cache_wraddr, cache_data, cache_be, cache_wren & ram_chan == 4, rcache_addr[4][4:3], cache_q[4]);
+ddr_cache_ram cache5 (clk, cache_wraddr, cache_data, cache_be, cache_wren & ram_chan == 5, rcache_addr[5][4:3], cache_q[5]);
+ddr_cache_ram cache6 (clk, cache_wraddr, cache_data, cache_be, cache_wren & ram_chan == 6, rcache_addr[6][4:3], cache_q[6]);
+ddr_cache_ram cache7 (clk, cache_wraddr, cache_data, cache_be, cache_wren & ram_chan == 7, rcache_addr[7][4:3], cache_q[7]);
+ddr_cache_ram cache8 (clk, cache_wraddr, cache_data, cache_be, cache_wren & ram_chan == 8, rcache_addr[8][4:3], cache_q[8]);
+ddr_cache_ram cache9 (clk, cache_wraddr, cache_data, cache_be, cache_wren & ram_chan == 9, rcache_addr[9][4:3], cache_q[9]);
+
 always_comb begin
-	bit [31:0] temp[10];
-	
 	for (int i=0; i<10; i++) begin
-		case (rcache_addr[i][3:2])
-			2'b00: temp[i] = rcache_buf[i][127:096];
-			2'b01: temp[i] = rcache_buf[i][095:064];
-			2'b10: temp[i] = rcache_buf[i][063:032];
-			2'b11: temp[i] = rcache_buf[i][031:000];
-		endcase
 		if (rcache_word[i]) 
-			case (rcache_addr[i][1])
-				1'b0: mem_dout[i] = {16'h0000,temp[i][31:16]};
-				1'b1: mem_dout[i] = {16'h0000,temp[i][15:00]};
+			case (rcache_addr[i][2:1])
+				2'b00: mem_dout[i] = {16'h0000,cache_q[i][63:48]};
+				2'b01: mem_dout[i] = {16'h0000,cache_q[i][47:32]};
+				2'b10: mem_dout[i] = {16'h0000,cache_q[i][31:16]};
+				2'b11: mem_dout[i] = {16'h0000,cache_q[i][15:00]};
 			endcase
 		else
-			mem_dout[i] = temp[i];
+			case (rcache_addr[i][2])
+				1'b0: mem_dout[i] = cache_q[i][63:32];
+				1'b1: mem_dout[i] = cache_q[i][31:00];
+			endcase
 			
 		mem_busy[i] = read_busy[i] | |write_busy[i];
 	end
@@ -496,5 +327,72 @@ assign DDRAM_ADDR     = {7'b0011000, ram_address[24:3]}; // RAM at 0x30000000
 assign DDRAM_RD       = ram_read;
 assign DDRAM_DIN      = ram_din;
 assign DDRAM_WE       = ram_write;
+
+endmodule
+
+
+module ddr_cache_ram (
+	clock,
+	wraddress,
+	data,
+	byteena,
+	wren,
+	rdaddress,
+	q);
+
+	input	  clock;
+	input	[1:0]  wraddress;
+	input	[63:0] data;
+	input	 [7:0] byteena;
+	input	       wren;
+	input	[1:0]  rdaddress;
+	output	[63:0]  q;
+`ifndef ALTERA_RESERVED_QIS
+// synopsys translate_off
+`endif
+	tri0	  wren;
+`ifndef ALTERA_RESERVED_QIS
+// synopsys translate_on
+`endif
+
+	wire [63:0] sub_wire0;
+	wire [63:0] q = sub_wire0;
+
+	altdpram	altdpram_component (
+				.data (data),
+				.inclock (clock),
+				.rdaddress (rdaddress),
+				.wraddress (wraddress),
+				.wren (wren),
+				.q (sub_wire0),
+				.aclr (1'b0),
+				.byteena (byteena),
+				.inclocken (1'b1),
+				.rdaddressstall (1'b0),
+				.rden (1'b1),
+				//.sclr (1'b0),
+				.wraddressstall (1'b0));
+	defparam
+		altdpram_component.indata_aclr = "OFF",
+		altdpram_component.indata_reg = "INCLOCK",
+		altdpram_component.intended_device_family = "Cyclone V",
+		altdpram_component.lpm_type = "altdpram",
+		altdpram_component.outdata_aclr = "OFF",
+		altdpram_component.outdata_reg = "UNREGISTERED",
+		altdpram_component.power_up_uninitialized = "TRUE",
+		altdpram_component.ram_block_type = "MLAB",
+		altdpram_component.rdaddress_aclr = "OFF",
+		altdpram_component.rdaddress_reg = "UNREGISTERED",
+		altdpram_component.rdcontrol_aclr = "OFF",
+		altdpram_component.rdcontrol_reg = "UNREGISTERED",
+		altdpram_component.read_during_write_mode_mixed_ports = "CONSTRAINED_DONT_CARE",
+		altdpram_component.width = 64,
+		altdpram_component.widthad = 2,
+		altdpram_component.byte_size = 8,
+		altdpram_component.width_byteena = 8,
+		altdpram_component.wraddress_aclr = "OFF",
+		altdpram_component.wraddress_reg = "INCLOCK",
+		altdpram_component.wrcontrol_aclr = "OFF",
+		altdpram_component.wrcontrol_reg = "INCLOCK";
 
 endmodule
