@@ -475,7 +475,17 @@ module emu
 	
 	
 	wire reset = RESET | status[0] | buttons[1];
-	wire rst_sys = reset | bios_download;
+	
+	reg rst_ram = 0;
+	reg download;
+	always @(posedge clk_sys) begin
+		download <= bios_download || cart_download;
+		rst_ram <= 0;
+		if (!bios_download && !cart_download && download) rst_ram <= 1;
+	end
+	
+	wire rst_sys = reset | download | rst_ram;
+
 	
 	wire  [3:0] area_code = status[35:33] == 3'd0 ? 4'h1 :	//Japan area
 									status[35:33] == 3'd1 ? 4'h2 :	//Asia NTSC area
@@ -901,7 +911,7 @@ module emu
 	(
 		.*,
 		.clk(clk_ram),
-		.rst(reset),
+		.rst(reset || rst_ram),
 		
 		//CD RAM
 		.mem0_addr({ 6'b010000,   CD_RAM_A[18:1]}             ),
