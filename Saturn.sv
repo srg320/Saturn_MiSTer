@@ -235,7 +235,7 @@ module emu
 	// 0         1         2         3          4         5         6   
 	// 01234567890123456789012345678901 23456789012345678901234567890123
 	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-	// XXXX XXXXXXXXXXXXXXXXXXX          XXXXXXXXXXXXX                
+	// XXXX XXXXXXXXXXXXXXXXXXXXXX       XXXXXXXXXXXXX                
 	
 	`include "build_id.v"
 	localparam CONF_STR = {
@@ -247,6 +247,11 @@ module emu
 		"OLN,Cartridge,None,ROM 2M,DRAM 1M,DRAM 4M;",
 		"o13,Region,Japan,Taiwan,USA,Brazil,Korea,Asia,Europe;",
 		"-;",
+		"D0RO,Load Backup RAM;",
+		"D0RP,Save Backup RAM;",
+		"D0OQ,Autosave,Off,On;", 
+		"-;",
+		
 		"P1,Audio & Video;",
 		"P1-;",
 		"P1OA,Aspect Ratio,4:3,16:9;",
@@ -276,6 +281,40 @@ module emu
 		"P3oB,SCSP Direct sound,Enable,Disable;",
 		"P3oC,SCSP DSP sound,Enable,Disable;",
 		"P3oD,CD audio,Enable,Disable;",
+`else
+		"P3,Debug;",
+		"P3o4,SCSP slot 0,Enable,Disable;",
+		"P3o5,SCSP slot 1,Enable,Disable;",
+		"P3o6,SCSP slot 2,Enable,Disable;",
+		"P3o7,SCSP slot 3,Enable,Disable;",
+		"P3o8,SCSP slot 4,Enable,Disable;",
+		"P3o9,SCSP slot 5,Enable,Disable;",
+		"P3oA,SCSP slot 6,Enable,Disable;",
+		"P3oB,SCSP slot 7,Enable,Disable;",
+		"P3oC,SCSP slot 8,Enable,Disable;",
+		"P3oD,SCSP slot 9,Enable,Disable;",
+		"P3oE,SCSP slot 10,Enable,Disable;",
+		"P3oF,SCSP slot 11,Enable,Disable;",
+		"P3oG,SCSP slot 12,Enable,Disable;",
+		"P3oH,SCSP slot 13,Enable,Disable;",
+		"P3oI,SCSP slot 14,Enable,Disable;",
+		"P3oJ,SCSP slot 15,Enable,Disable;",
+		"P3oK,SCSP slot 16,Enable,Disable;",
+		"P3oL,SCSP slot 17,Enable,Disable;",
+		"P3oM,SCSP slot 18,Enable,Disable;",
+		"P3oN,SCSP slot 19,Enable,Disable;",
+		"P3oO,SCSP slot 20,Enable,Disable;",
+		"P3oP,SCSP slot 21,Enable,Disable;",
+		"P3oQ,SCSP slot 22,Enable,Disable;",
+		"P3oR,SCSP slot 23,Enable,Disable;",
+		"P3oS,SCSP slot 24,Enable,Disable;",
+		"P3oT,SCSP slot 25,Enable,Disable;",
+		"P3oU,SCSP slot 26,Enable,Disable;",
+		"P3oV,SCSP slot 27,Enable,Disable;",
+		"P3OS,SCSP slot 28,Enable,Disable;",
+		"P3OT,SCSP slot 29,Enable,Disable;",
+		"P3OU,SCSP slot 30,Enable,Disable;",
+		"P3OV,SCSP slot 31,Enable,Disable;",
 `endif
 
 		"-;",
@@ -303,7 +342,7 @@ module emu
 	wire        sd_ack;
 	wire  [7:0] sd_buff_addr;
 	wire [15:0] sd_buff_dout;
-	wire [15:0] sd_buff_din = '0;
+	wire [15:0] sd_buff_din;
 	wire        sd_buff_wr;
 	wire        img_mounted;
 	wire        img_readonly;
@@ -340,7 +379,7 @@ module emu
 		.status(status),
 		.status_in({status[63:8],region_req,status[5:0]}),
 		.status_set(region_set),
-		.status_menumask({1'b1,1'b1,~status[8],1'b1,1'b1}),
+		.status_menumask({1'b1,1'b1,~status[8],1'b1,~bk_ena}),
 	
 		.ioctl_download(ioctl_download),
 		.ioctl_index(ioctl_index),
@@ -375,8 +414,8 @@ module emu
 	
 	wire bios_download = ioctl_download & (ioctl_index[5:2] == 4'b0000 && ioctl_index[1:0] != 2'h3);
 	wire cart_download = ioctl_download & (ioctl_index[5:2] == 4'b0000 && ioctl_index[1:0] == 2'h3);
-	wire cdd_download = ioctl_download & (ioctl_index[5:2] == 4'b0001);
-	wire cdd_download2 = ioctl_download & (ioctl_index[5:2] == 4'b0010);
+	wire save_download = ioctl_download & (ioctl_index[5:2] == 4'b0001);
+	wire cdd_download = ioctl_download & (ioctl_index[5:2] == 4'b0010);
 	
 	reg osd_btn = 0;
 //	always @(posedge clk_sys) begin
@@ -773,6 +812,7 @@ module emu
 		
 		.SCRN_EN(SCRN_EN & SCRN_EN2),
 		.SND_EN(SND_EN & SND_EN2),
+		.SLOT_EN(SLOT_EN),
 		.DBG_PAUSE(DBG_PAUSE),
 		.DBG_BREAK(DBG_BREAK),
 		.DBG_RUN(DBG_RUN),
@@ -832,7 +872,6 @@ module emu
 		.CD_COMSYNC_N(CD_COMSYNC_N),
 		
 		.CDD_ACT(cdd_download),
-		.CDD_ACT2(cdd_download2),
 		.CDD_WR(ioctl_wr),
 		.CDD_DI(ioctl_data),
 		
@@ -894,7 +933,7 @@ module emu
 		reg old_busy;
 		
 		old_busy <= ddr_busy[8];
-		if ((bios_download || cart_download) /*&& ioctl_addr[24:4] && !ioctl_addr[3:1]*/ && ioctl_wr) ioctl_wait <= 1;
+		if ((bios_download || cart_download) && ioctl_wr) ioctl_wait <= 1;
 		if (~ddr_busy[8] && old_busy) ioctl_wait <= 0;
 	end
 	wire [24:1] IO_ADDR = cart_download ? {3'b011,ioctl_addr[21:1]} : {6'b000000,ioctl_addr[18:1]};
@@ -1030,10 +1069,10 @@ module emu
 		.mem8_busy(ddr_busy[8]                                ),
 		
 		//SRAM backup
-		.mem9_addr({ 9'b000001000,ioctl_addr[15:1]}           ),
-		.mem9_din ({24'h000000,SRAM_INIT_DATA}                ),
-		.mem9_wr  ({3'b000,SRAM_INIT_WE}                      ),
-		.mem9_rd  (0                                          ),
+		.mem9_addr({9'b000001000,sd_lba[6:0],tmpram_addr}     ),
+		.mem9_din ({16'h0000,tmpram_dout[7:0],tmpram_dout[15:8]}),
+		.mem9_wr  ({2'b00,{2{tmpram_req & bk_loading}}}       ),
+		.mem9_rd  ((tmpram_req & ~bk_loading)                 ),
 		.mem9_dout(ddr_do[9]                                  ),
 		.mem9_16b (1                                          ),
 		.mem9_wcen(0                                          ),
@@ -1241,8 +1280,159 @@ module emu
 	assign VDP1_FB_RDY = ~(VDP1_FB0_BUSY | VDP1_FB1_BUSY);
 //`endif
 
+/////////////////////////  BRAM SAVE/LOAD  /////////////////////////////
+	wire downloading = save_download;
+	wire bk_change  = ~SRAM_CS_N & ~MEM_DQM_N[0];
+	wire bk_load    = status[24];
+	wire bk_save    = status[25];
+	wire autosave   = status[26];
 
+	reg bk_ena = 0;
+	reg sav_pending = 0;
+	always @(posedge clk_sys) begin
+		reg old_downloading = 0;
+		reg old_change = 0;
 
+		old_downloading <= downloading;
+		if(downloading && !old_downloading) bk_ena <= 0;
+
+		//Save file always mounted in the end of downloading state.
+		if(downloading && img_mounted && !img_readonly) bk_ena <= 1;
+
+		old_change <= bk_change;
+		if (bk_change && !old_change) sav_pending <= 1;
+		else if (bk_state) sav_pending <= 0;
+	end
+
+	wire bk_save_a  = autosave & OSD_STATUS;
+	reg  bk_loading = 0;
+	reg  bk_state   = 0;
+	//reg  bk_reload  = 0;
+
+	always @(posedge clk_sys) begin
+		reg old_downloading = 0;
+		reg old_load = 0, old_save = 0, old_save_a = 0, old_ack;
+		reg [1:0] state;
+
+		old_downloading <= downloading;
+
+		old_load   <= bk_load;
+		old_save   <= bk_save;
+		old_save_a <= bk_save_a;
+		old_ack    <= sd_ack;
+
+		if(sd_ack && !old_ack) {sd_rd, sd_wr} <= 0;
+
+		if (!bk_state) begin
+			tmpram_tx_start <= 0;
+			state <= 0;
+			sd_lba <= 0;
+	//		bk_reload <= 0;
+			bk_loading <= 0;
+			if (bk_ena && ((bk_load && !old_load) | (bk_save && !old_save) | (bk_save_a && !old_save_a && sav_pending))) begin
+				bk_state <= 1;
+				bk_loading <= bk_load;
+	//			bk_reload <= bk_load;
+				sd_rd <=  bk_load;
+				sd_wr <= 0;
+			end
+			if (old_downloading && !bios_download && !cart_download && bk_ena) begin
+				bk_state <= 1;
+				bk_loading <= 1;
+				sd_rd <= 1;
+				sd_wr <= 0;
+			end
+		end
+		else begin
+			if (bk_loading) begin
+				case(state)
+					0: begin
+							sd_rd <= 1;
+							state <= 1;
+						end
+					1: if (!sd_ack && old_ack) begin
+							tmpram_tx_start <= 1;
+							state <= 2;
+						end
+					2: if(tmpram_tx_finish) begin
+							tmpram_tx_start <= 0;
+							state <= 0;
+							sd_lba <= sd_lba + 1'd1;
+							if (sd_lba[6:0] == 7'h7F) bk_state <= 0;
+						end
+				endcase
+			end
+			else begin
+				case(state)
+					0: begin
+							tmpram_tx_start <= 1;
+							state <= 1;
+						end
+					1: if (tmpram_tx_finish) begin
+							tmpram_tx_start <= 0;
+							sd_wr <= 1;
+							state <= 2;
+						end
+					2: if (!sd_ack && old_ack) begin
+							state <= 0;
+							sd_lba <= sd_lba + 1'd1;
+							if (sd_lba[6:0] == 7'h7F) bk_state <= 0;
+						end
+				endcase
+			end
+		end
+	end
+
+	wire [15:0] tmpram_dout;
+	wire [15:0] tmpram_din = {ddr_do[9][7:0],ddr_do[9][15:8]};
+	wire        tmpram_busy = ddr_busy[9];
+
+	wire [15:0] tmpram_sd_buff_q;
+	dpram_dif #(8,16,8,16) tmpram
+	(
+		.clock(clk_sys),
+
+		.address_a(tmpram_addr),
+		.wren_a(~bk_loading & tmpram_req & ~tmpram_busy),
+		.data_a(tmpram_din),
+		.q_a(tmpram_dout),
+
+		.address_b(sd_buff_addr),
+		.wren_b(sd_buff_wr & sd_ack /*& |sd_lba[10:4]*/),
+		.data_b(sd_buff_dout),
+		.q_b(tmpram_sd_buff_q)
+	);
+
+	//reg [10:0] tmpram_lba;
+	reg  [8:1] tmpram_addr;
+	reg tmpram_tx_start;
+	reg tmpram_tx_finish;
+	reg tmpram_req;
+	always @(posedge clk_sys) begin
+		reg state;
+
+	//	tmpram_lba <= sd_lba[10:0] - 11'h10;
+		
+		if (tmpram_req && !tmpram_busy) tmpram_req <= 0;
+
+		if (~tmpram_tx_start) {tmpram_addr, state, tmpram_tx_finish} <= '0;
+		else if (~tmpram_tx_finish) begin
+			if (!state) begin
+				tmpram_req <= 1;
+				state <= 1;
+			end
+			else if (tmpram_req && !tmpram_busy) begin
+				state <= 0;
+				if (~&tmpram_addr) tmpram_addr <= tmpram_addr + 1'd1;
+				else tmpram_tx_finish <= 1;
+			end
+		end
+	end
+
+	assign sd_buff_din = tmpram_sd_buff_q; 
+
+	
+/////////////////////////  Video  /////////////////////////////
 	wire PAL = (area_code >= 4'hA);//status[7];
 	
 	reg new_vmode;
@@ -1280,13 +1470,21 @@ module emu
 	assign CLK_VIDEO = clk_sys;
 	assign VGA_SL = {~INTERLACE,~INTERLACE} & sl[1:0];
 	
+`ifndef DEBUG
+	wire scandoubler = ~INTERLACE & (|scale | forced_scandoubler);
+	wire hq2x = (scale == 1);
+`else
+	wire scandoubler = 0;
+	wire hq2x = 0;
+`endif
+
 	video_mixer #(.LINE_LENGTH((352*2)+8), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 	(
 		.*,
 	
 		.ce_pix(DCLK),	
-		.scandoubler(~INTERLACE && (scale || forced_scandoubler)),
-		.hq2x(scale==1),	
+		.scandoubler(scandoubler),
+		.hq2x(hq2x),	
 		.freeze_sync(),
 	
 		.R(R),
@@ -1302,16 +1500,17 @@ module emu
 
 
 	//debug
-	reg  [7:0] SCRN_EN = 8'b11111111;
-	reg  [2:0] SND_EN = 3'b111;
-	reg        DBG_PAUSE = 0;
-	reg        DBG_BREAK = 0;
-	reg        DBG_RUN = 0;
+	reg  [ 7: 0] SCRN_EN = 8'b11111111;
+	reg  [ 2: 0] SND_EN = 3'b111;
+	reg  [31: 0] SLOT_EN = '1;
+	reg          DBG_PAUSE = 0;
+	reg          DBG_BREAK = 0;
+	reg          DBG_RUN = 0;
 	
-	reg  [3:0] DBG_EXT = '0;
+	reg  [ 7: 0] DBG_EXT = '0;
 	
-	wire       pressed = ps2_key[9];
-	wire [8:0] code    = ps2_key[8:0];
+	wire         pressed = ps2_key[9];
+	wire [ 8: 0] code    = ps2_key[8:0];
 	always @(posedge clk_sys) begin
 		reg old_state = 0;
 	
@@ -1331,7 +1530,7 @@ module emu
 				'h00A: begin SND_EN[0] <= ~SND_EN[0]; end 	// F8
 				'h001: begin SND_EN[1] <= ~SND_EN[1]; end 	// F9
 				'h009: begin SND_EN[2] <= ~SND_EN[2]; end 	// F10
-				'h078: begin SCRN_EN <= '1; SND_EN <= '1; end 	// F11
+				'h078: begin SCRN_EN <= '1; SND_EN <= '1; DBG_EXT <= '1; end 	// F11
 `ifdef DEBUG
 //				'h009: begin DBG_BREAK <= ~DBG_BREAK; end 	// F10
 //				'h078: begin DBG_RUN <= 1; end 	// F11
@@ -1343,10 +1542,14 @@ module emu
 		if(pressed) begin
 			casex(code)
 `ifdef DEBUG
-				'h016: begin DBG_EXT[0] <= 1; end 	// 1
-				'h01E: begin DBG_EXT[1] <= 1; end 	// 2
-				'h026: begin DBG_EXT[2] <= 1; end 	// 3
-				'h025: begin DBG_EXT[3] <= 1; end 	// 4
+				'h016: begin DBG_EXT[0] <= ~DBG_EXT[0]; end 	// 1
+				'h01E: begin DBG_EXT[1] <= ~DBG_EXT[1]; end 	// 2
+				'h026: begin DBG_EXT[2] <= ~DBG_EXT[2]; end 	// 3
+				'h025: begin DBG_EXT[3] <= ~DBG_EXT[3]; end 	// 4
+				'h02E: begin DBG_EXT[4] <= ~DBG_EXT[4]; end 	// 5
+				'h036: begin DBG_EXT[5] <= ~DBG_EXT[5]; end 	// 6
+				'h03D: begin DBG_EXT[6] <= ~DBG_EXT[6]; end 	// 7
+				'h03E: begin DBG_EXT[7] <= ~DBG_EXT[7]; end 	// 8
 `endif
 				default:;
 			endcase
@@ -1360,5 +1563,6 @@ module emu
 	assign SCRN_EN2 = ~status[42:36];
 	assign SND_EN2 = ~status[45:43];
 `endif
+	assign SLOT_EN = {~status[31:28],~status[63:36]};
 
 endmodule

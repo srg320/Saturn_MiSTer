@@ -12,7 +12,6 @@ module HPS2CDD (
 	output reg         CD_COMSYNC_N,
 		
 	input              CDD_ACT,
-	input              CDD_ACT2,
 	input              CDD_WR,
 	input      [15: 0] CDD_DI,
 		
@@ -132,7 +131,6 @@ module HPS2CDD (
 	
 	bit         SPEED[2];
 	bit         AUDIO[2];
-	bit         RING[2];
 	bit [ 1: 0] BUF_N[2];
 	bit         PEND[2];
 	
@@ -151,38 +149,30 @@ module HPS2CDD (
 			PEND <= '{2{0}};
 			PAR_POS_WR <= 0;
 			PAR_POS_RD <= 0;
+			SPEED <= '{2{1'b0}};
+			AUDIO <= '{2{1'b0}};
+			BUF_N <= '{2{2'b00}};
+			PEND <= '{2{1'b0}};
 		end else begin
 			CDFIFO_WR <= 0;
 			case (state)
-				0: /*if (CDD_ACT && CDD_WR) begin
-					SPEED[0] <= CDD_DI[0];
-					AUDIO[0] <= CDD_DI[1];
-					state <= 1;
-				end else*/ 
-				if (CDD_ACT2 && CDD_WR) begin
+				0: if (CDD_ACT && CDD_WR) begin
 					SPEED[PAR_POS_WR] <= CDD_DI[0];
 					AUDIO[PAR_POS_WR] <= CDD_DI[1];
 					BUF_N[PAR_POS_WR] <= CDD_DI[5:4];
 					PEND[PAR_POS_WR] <= 1;
 					PAR_POS_WR <= ~PAR_POS_WR;
-					state <= 2;
+					state <= 1;
 				end
 				
-//				1: if (!CDD_ACT) begin
-//					state <= 0;
-//				end else if (CDD_ACT && CDD_WR) begin
-//					CDFIFO_WR <= 1;
-//					CDFIFO_DATA <= {SPEED[0],AUDIO[0],CDD_DI};
-//				end
-				
-				2: if (!CDD_ACT2) begin
+				1: if (!CDD_ACT) begin
 					state <= 0;
 				end
 			endcase
 			
 			CD_BUF_RD <= 0;
 			case (state2)
-				0: if (PEND[PAR_POS_RD] && !CDD_ACT2) begin
+				0: if (PEND[PAR_POS_RD] && !CDD_ACT) begin
 					PEND[PAR_POS_RD] <= 0;
 					BUF_ADDR <= '0;
 					CDD_BUF_N <= BUF_N[PAR_POS_RD];
