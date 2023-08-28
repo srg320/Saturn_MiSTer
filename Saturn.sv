@@ -964,7 +964,6 @@ module emu
 `endif
 		.mem0_dout(ddr_do[0]                                  ),
 		.mem0_16b (1                                          ),
-		.mem0_wcen(1                                          ),
 		.mem0_busy(ddr_busy[0]                                ),
 	
 		//CPU bus (ROM,SRAM)
@@ -974,7 +973,6 @@ module emu
 		.mem1_rd  ((~ROM_CS_N | ~SRAM_CS_N) & ~MEM_RD_N       ),
 		.mem1_dout(ddr_do[1]                                  ),
 		.mem1_16b (1                                          ),
-		.mem1_wcen(0                                          ),
 		.mem1_busy(ddr_busy[1]                                ),
 	
 		//CPU bus (RAMH)
@@ -984,7 +982,6 @@ module emu
 		.mem2_rd  (~RAMH_CS_N & ~MEM_RD_N                     ),
 		.mem2_dout(ddr_do[2]                                  ),
 		.mem2_16b (0                                          ),
-		.mem2_wcen(1                                          ),
 		.mem2_busy(ddr_busy[2]                                ),
 		
 		//CPU bus (RAML)
@@ -994,7 +991,6 @@ module emu
 		.mem3_rd  (~RAML_CS_N & ~MEM_RD_N                     ),
 		.mem3_dout(ddr_do[3]                                  ),
 		.mem3_16b (1                                          ),
-		.mem3_wcen(1                                          ),
 		.mem3_busy(ddr_busy[3]                                ),
 	
 		//VDP1 VRAM
@@ -1011,7 +1007,6 @@ module emu
 //`endif
 		.mem4_dout(ddr_do[4]                                  ),
 		.mem4_16b (1                                          ),
-		.mem4_wcen(1                                          ),
 		.mem4_busy(ddr_busy[4]                                ),
 	
 		//VDP1 FB (rest)
@@ -1028,7 +1023,6 @@ module emu
 //`endif
 		.mem5_dout(ddr_do[5]                                  ),
 		.mem5_16b (1                                          ),
-		.mem5_wcen(1                                          ),
 		.mem5_busy(ddr_busy[5]                                ),
 		
 		//CD BUF
@@ -1038,7 +1032,6 @@ module emu
 		.mem6_rd  (CD_BUF_RD                                  ),
 		.mem6_dout(ddr_do[6]                                  ),
 		.mem6_16b (1                                          ),
-		.mem6_wcen(0                                          ),
 		.mem6_busy(ddr_busy[6]                                ),
 		
 		//CART MEM
@@ -1055,7 +1048,6 @@ module emu
 `endif
 		.mem7_dout(ddr_do[7]                                  ),
 		.mem7_16b (1                                          ),
-		.mem7_wcen(0                                          ),
 		.mem7_busy(ddr_busy[7]                                ),
 	
 		//BIOS/CART load
@@ -1065,7 +1057,6 @@ module emu
 		.mem8_rd  (0                                          ),
 		.mem8_dout(ddr_do[8]                                  ),
 		.mem8_16b (1                                          ),
-		.mem8_wcen(0                                          ),
 		.mem8_busy(ddr_busy[8]                                ),
 		
 		//SRAM backup
@@ -1075,7 +1066,6 @@ module emu
 		.mem9_rd  ((tmpram_req & ~bk_loading)                 ),
 		.mem9_dout(ddr_do[9]                                  ),
 		.mem9_16b (1                                          ),
-		.mem9_wcen(0                                          ),
 		.mem9_busy(ddr_busy[9]                                )
 	);
 	assign VDP1_VRAM_Q = ddr_do[4][15:0];

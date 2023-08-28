@@ -42,7 +42,6 @@ module ddram
 	input         mem0_rd,
 	input   [3:0] mem0_wr,
 	input         mem0_16b,
-	input         mem0_wcen,
 	output        mem0_busy,
 	
 	input  [24:1] mem1_addr,
@@ -51,7 +50,6 @@ module ddram
 	input         mem1_rd,
 	input   [3:0] mem1_wr,
 	input         mem1_16b,
-	input         mem1_wcen,
 	output        mem1_busy,
 
 	input  [24:1] mem2_addr,
@@ -60,7 +58,6 @@ module ddram
 	input         mem2_rd,
 	input   [3:0] mem2_wr,
 	input         mem2_16b,
-	input         mem2_wcen,
 	output        mem2_busy,
 
 	input  [24:1] mem3_addr,
@@ -69,7 +66,6 @@ module ddram
 	input         mem3_rd,
 	input   [3:0] mem3_wr,
 	input         mem3_16b,
-	input         mem3_wcen,
 	output        mem3_busy,
 
 	input  [24:1] mem4_addr,
@@ -78,7 +74,6 @@ module ddram
 	input         mem4_rd,
 	input   [3:0] mem4_wr,
 	input         mem4_16b,
-	input         mem4_wcen,
 	output        mem4_busy,
 
 	input  [24:1] mem5_addr,
@@ -87,7 +82,6 @@ module ddram
 	input         mem5_rd,
 	input   [3:0] mem5_wr,
 	input         mem5_16b,
-	input         mem5_wcen,
 	output        mem5_busy,
 
 	input  [24:1] mem6_addr,
@@ -96,7 +90,6 @@ module ddram
 	input         mem6_rd,
 	input   [3:0] mem6_wr,
 	input         mem6_16b,
-	input         mem6_wcen,
 	output        mem6_busy,
 
 	input  [24:1] mem7_addr,
@@ -105,7 +98,6 @@ module ddram
 	input         mem7_rd,
 	input   [3:0] mem7_wr,
 	input         mem7_16b,
-	input         mem7_wcen,
 	output        mem7_busy,
 
 	input  [24:1] mem8_addr,
@@ -114,7 +106,6 @@ module ddram
 	input         mem8_rd,
 	input   [3:0] mem8_wr,
 	input         mem8_16b,
-	input         mem8_wcen,
 	output        mem8_busy,
 
 	input  [24:1] mem9_addr,
@@ -123,7 +114,6 @@ module ddram
 	input         mem9_rd,
 	input   [3:0] mem9_wr,
 	input         mem9_16b,
-	input         mem9_wcen,
 	output        mem9_busy
 );
 
@@ -151,7 +141,6 @@ wire [  3:  0] mem_wr[10] = '{mem0_wr,mem1_wr,mem2_wr,mem3_wr,mem4_wr,mem5_wr,me
 wire [ 24:  1] mem_addr[10] = '{mem0_addr,mem1_addr,mem2_addr,mem3_addr,mem4_addr,mem5_addr,mem6_addr,mem7_addr,mem8_addr,mem9_addr};
 wire           mem_16b[10] = '{mem0_16b,mem1_16b,mem2_16b,mem3_16b,mem4_16b,mem5_16b,mem6_16b,mem7_16b,mem8_16b,mem9_16b};
 wire [ 31:  0] mem_din[10] = '{mem0_din,mem1_din,mem2_din,mem3_din,mem4_din,mem5_din,mem6_din,mem7_din,mem8_din,mem9_din};
-//wire           mem_wcen[10] = '{mem0_wcen,mem1_wcen,mem2_wcen,mem3_wcen,mem4_wcen,mem5_wcen,mem6_wcen,mem7_wcen,mem8_wcen,mem9_wcen};
 wire [ 31:  0] mem_dout[10];
 wire           mem_busy[10];
 
