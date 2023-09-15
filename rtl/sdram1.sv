@@ -138,10 +138,10 @@ module sdram1
 	reg [63: 0] din[2];
 	reg [ 7: 0] wr[2];
 	reg         rd[2];
-	reg [21: 1] addr2;
+	reg [21: 1] addr2,addr2_pipe;
 	reg [15: 0] din2;
 	reg         wr2;
-	reg         rd2;
+	reg         rd2,rd2_pipe;
 	reg [ 1: 0] be2;
 	reg         wr2_pend;
 	reg         rd2_pend;
@@ -149,7 +149,7 @@ module sdram1
 	always @(posedge clk) begin
 		reg sync_old;
 		reg old_rd2, old_wr2;
-		reg st_num3_latch;
+		reg st_num3_latch,st_num3_latch_pipe;
 		reg ch2_lock;
 		
 		sync_old <= sync;
@@ -160,6 +160,7 @@ module sdram1
 			rd2_pend <= 0;
 			wr2_pend <= 0;
 			ch2_lock <= 0;
+			rd2_pipe <= 0;
 		end else begin
 			st_num <= st_num + 4'd1;
 			if (!sync && sync_old) 
@@ -181,7 +182,7 @@ module sdram1
 			if (ch2wr && !old_wr2) wr2_pend <= 1;
 			if (ch2rd && !old_rd2) rd2_pend <= 1;
 			
-			if (st_num[2:0] == 3'd7 && !rd2 && !wr2 && (ch2rd || ch2wr) && !ch2_lock) begin
+			if (st_num[2:0] == 3'd7 && !rd2 && !wr2 && (rd2_pend || wr2_pend) && !ch2_lock) begin
 				addr2 <= ch2addr;
 				din2 <= ch2din;
 				rd2 <= ch2rd & ~|ch2wr;
@@ -189,20 +190,22 @@ module sdram1
 				be2 <= ch2wr;
 				st_num3_latch <= st_num[3];
 				ch2_lock <= 1;
-			end else if (st_num[3] == ~st_num3_latch && st_num[2:0] == 3'd4 && wr2) begin
+			end else if (st_num[3] == ~st_num3_latch && st_num[2:0] == 3'd4 && (wr2 || rd2)) begin
 				wr2 <= 0;
 				rd2 <= 0;
 				be2 <= 2'b11;
 				wr2_pend <= 0;
 				rd2_pend <= 0;
-			end else if (st_num[3] == ~st_num3_latch && st_num[2:0] == 3'd6 && rd2) begin
-				rd2 <= 0;
-				wr2 <= 0;
-				be2 <= 2'b11;
-				wr2_pend <= 0;
-				rd2_pend <= 0;
+				if (wr2) ch2_lock <= 0;
+				
+				addr2_pipe <= addr2;
+				rd2_pipe <= rd2;
+				st_num3_latch_pipe <= st_num3_latch;
 			end
-			if (!ch2rd && !ch2wr && ch2_lock) ch2_lock <= 0;
+			if (st_num[3] == st_num3_latch_pipe && st_num[2:0] == 3'd4 && rd2_pipe) begin
+				rd2_pipe <= 0;
+				ch2_lock <= 0;
+			end
 		end
 		
 	end
@@ -217,39 +220,45 @@ module sdram1
 			state[0].RFS <= 1;
 		end else begin
 			case (st_num[2:0])
-				3'b000: begin state[0].CMD  <=                                   CTRL_RAS;
-								  state[0].ADDR <=                                   addr2[19:1];
-				              state[0].BANK <= addr2[21:20];
-								  state[0].RFS  <= ~wr2 & ~rd2;
+				3'b000: begin state[0].CMD  <= wr2                             ? CTRL_RAS          : 
+				                               rd2_pipe                        ? CTRL_CAS          : CTRL_IDLE;
+								  state[0].ADDR <= wr2                             ? addr2[19:1]       : 
+				                                                                 addr2_pipe[19:1];
+				              state[0].RD   <= rd2_pipe;
+				              state[0].BANK <= wr2                             ? addr2[21:20]      : 
+				                                                                 addr2_pipe[21:20];
 				              state[0].CHIP <= 1; end
 								  
 				3'b001: begin state[0].CMD  <= wr[st_num[3]] || rd[st_num[3]]  ? CTRL_RAS          : CTRL_IDLE;
 								  state[0].ADDR <= rd[st_num[3]]                   ? raddr0[st_num[3]] : waddr[st_num[3]][19:1];
 								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b0}  : {st_num[3],waddr[st_num[3]][20]};
 				              state[0].CHIP <= 0; end
+
+				3'b010: begin state[0].CMD  <= !wr[st_num[3]]                  ? CTRL_RAS          : CTRL_IDLE;
+								  state[0].ADDR <= rd[st_num[3]]                   ? raddr1[st_num[3]] : '0;
+								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b1}  : {st_num[3],1'b1};
+								  state[0].RFS  <= ~|wr[st_num[3]] & ~rd[st_num[3]];
+				              state[0].CHIP <= 0; end
 								  
-				3'b010: begin state[0].CMD  <= wr2 | rd2                       ? CTRL_CAS          : CTRL_IDLE;
+				3'b011: begin state[0].CMD  <= wr2                             ? CTRL_CAS          : 
+				                               rd2                             ? CTRL_RAS          : 
+				                               !rd2_pipe                       ? CTRL_RAS          : CTRL_IDLE;
 								  state[0].ADDR <=                                   addr2[19:1];
-				              state[0].RD   <= rd2;
 								  state[0].DATA <= din2;
 								  state[0].WE   <= wr2;
 								  state[0].BE   <= be2;
 				              state[0].BANK <= addr2[21:20];
+								  state[0].RFS  <= ~wr2 & ~rd2 & ~rd2_pipe;
 				              state[0].CHIP <= 1; end
 
-				3'b011: begin state[0].CMD  <= !wr[st_num[3]]                  ? CTRL_RAS          : CTRL_CAS;
-								  state[0].ADDR <= rd[st_num[3]]                   ? raddr1[st_num[3]] : {waddr[st_num[3]][19:3],2'b00};
+				3'b100: begin state[0].CMD  <= rd[st_num[3]]                   ? CTRL_CAS          : 
+				                               wr[st_num[3]]                                       ? CTRL_CAS                        : CTRL_IDLE;
+								  state[0].ADDR <= rd[st_num[3]]                   ? raddr0[st_num[3]] : {waddr[st_num[3]][19:3],2'b00};
+				              state[0].RD   <= rd[st_num[3]];
 								  state[0].DATA <= din[st_num[3]][63:48];
 								  state[0].WE   <= |wr[st_num[3]];
 								  state[0].BE   <= wr[st_num[3]][7:6];
-								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b1}  : {st_num[3],waddr[st_num[3]][20]};
-								  state[0].RFS  <= ~|wr[st_num[3]] & ~rd[st_num[3]];
-				              state[0].CHIP <= 0; end
-								  
-				3'b100: begin state[0].CMD  <= rd[st_num[3]]                   ? CTRL_CAS                                            : CTRL_IDLE;
-								  state[0].ADDR <=                                   raddr0[st_num[3]];
-				              state[0].RD   <= rd[st_num[3]];
-								  state[0].BANK <=                                  {st_num[3],1'b0};
+								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b0}  : {st_num[3],waddr[st_num[3]][20]};
 				              state[0].CHIP <= 0; end
 
 				3'b101: begin state[0].CMD  <= wr[st_num[3]]                                       ? CTRL_CAS                        : CTRL_IDLE;
@@ -315,13 +324,13 @@ module sdram1
 	always @(posedge clk) begin
 		if (data0_read || data1_read) rbuf <= SDRAM_DQ;
 
-		if (out0_read && !out0_chip) dout[{1'b0,out0_bank}][31:16] <= rbuf;
-		if (out1_read && !out1_chip) dout[{1'b0,out1_bank}][15: 0] <= rbuf;
+		if (out0_read && !out0_chip) dout[out0_bank][31:16] <= rbuf;
+		if (out1_read && !out1_chip) dout[out1_bank][15: 0] <= rbuf;
 		if (out0_read && out0_chip) dout2 <= rbuf;
 	end
 		
 	assign {dout_a0,dout_a1,dout_b0,dout_b1} = {dout[0],dout[1],dout[2],dout[3]};
-	assign ch2dout = out0_read && out0_chip ? rbuf : dout2;
+	assign ch2dout = dout2;
 	
 
 	localparam CMD_NOP             = 3'b111;
