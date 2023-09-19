@@ -475,17 +475,17 @@ module emu
 
 	always @(posedge CLK_50M) begin
 //		reg pald = 0, pald2 = 0;
-		reg hres = 0, hres2 = 0;
+		reg dotsel = 0, dotsel2 = 0;
 		reg [2:0] state = 0;
 
 //		pald  <= PAL;
 //		pald2 <= pald;
 		
-		hres  <= HRES[0];
-		hres2 <= hres;
+		dotsel  <= SMPC_DOTSEL;
+		dotsel2 <= dotsel;
 	
 		cfg_write <= 0;
-		if (hres2 != hres) state <= 1;
+		if (dotsel2 != dotsel) state <= 1;
 	
 		if (!cfg_waitrequest) begin
 			if (state) state <= state + 1'd1;
@@ -497,12 +497,12 @@ module emu
 					end
 				3: begin
 						cfg_address <= 4;
-						cfg_data <= !hres2 ? 32'h00000404 : 32'h00020504;
+						cfg_data <= !dotsel2 ? 32'h00000404 : 32'h00020504;
 						cfg_write <= 1;
 					end
 				5: begin
 						cfg_address <= 7;
-						cfg_data <= !hres2 ? 2532450157 : 702807747;
+						cfg_data <= !dotsel2 ? 2532450157 : 702807747;
 						cfg_write <= 1;
 					end
 				7: begin
@@ -598,6 +598,7 @@ module emu
 	wire        SCSP_RAM_RFS;
 	wire        SCSP_RAM_RDY;
 	
+	wire         SMPC_DOTSEL;
 	wire [ 6: 0] SMPC_PDR1I;
 	wire [ 6: 0] SMPC_PDR1O;
 	wire [ 6: 0] SMPC_DDR1;
@@ -643,7 +644,7 @@ module emu
 	wire  [1:0] VRES;
 	wire        DCE_R;
 
-	wire [31:0] in_clk = !HRES[0] ? 53685200 : 57272720;
+	wire [31:0] in_clk = !SMPC_DOTSEL ? 53685200 : 57272720;
 	
 	bit MCLK_DIV;
 	always @(posedge clk_sys) MCLK_DIV <= ~MCLK_DIV;
@@ -758,6 +759,7 @@ module emu
 		.SMPC_CE(SMPC_CE),
 		.TIME_SET(~status[32]),
 		.SMPC_AREA(area_code),
+		.SMPC_DOTSEL(SMPC_DOTSEL),
 		.SMPC_PDR1I(SMPC_PDR1I),
 		.SMPC_PDR1O(SMPC_PDR1O),
 		.SMPC_DDR1(SMPC_DDR1),

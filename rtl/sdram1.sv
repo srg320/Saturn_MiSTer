@@ -60,17 +60,18 @@ module sdram1
 	localparam BURST_1        = 3'd0; // 0=1, 1=2, 2=4, 3=8, 7=full page
 	localparam BURST_2        = 3'd1; // 0=1, 1=2, 2=4, 3=8, 7=full page
 	localparam ACCESS_TYPE    = 1'd0; // 0=sequential, 1=interleaved
-	localparam CAS_LATENCY    = 3'd2; // 2/3 allowed
+	localparam CAS_LATENCY_1  = 3'd3; // 2/3 allowed
+	localparam CAS_LATENCY_2  = 3'd2; // 2/3 allowed
 	localparam OP_MODE        = 2'd0; // only 0 (standard operation) allowed
 	localparam NO_WRITE_BURST = 1'd1; // 0=write burst enabled, 1=only single access write
 
-	localparam bit [12:0] MODE[2] = '{{3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_2},
-	                                  {3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_1}}; 
+	localparam bit [12:0] MODE[2] = '{{3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY_2, ACCESS_TYPE, BURST_2},
+	                                  {3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY_1, ACCESS_TYPE, BURST_1}}; 
 	
 	localparam STATE_IDLE  = 3'd0;             // state to check the requests
 	localparam STATE_START = STATE_IDLE+1'd1;  // state in which a new command is started
 	localparam STATE_CONT  = STATE_START+RASCAS_DELAY;
-	localparam STATE_READY = STATE_CONT+CAS_LATENCY+1'd1;
+	localparam STATE_READY = STATE_CONT+CAS_LATENCY_1+1'd1;
 	localparam STATE_LAST  = STATE_READY;      // last state in cycle
 	
 	localparam MODE_NORMAL = 2'b00;
@@ -229,15 +230,15 @@ module sdram1
 				                                                                 addr2_pipe[21:20];
 				              state[0].CHIP <= 1; end
 								  
-				3'b001: begin state[0].CMD  <= wr[st_num[3]] || rd[st_num[3]]  ? CTRL_RAS          : CTRL_IDLE;
+				3'b001: begin state[0].CMD  <=                                   CTRL_RAS;
 								  state[0].ADDR <= rd[st_num[3]]                   ? raddr0[st_num[3]] : waddr[st_num[3]][19:1];
 								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b0}  : {st_num[3],waddr[st_num[3]][20]};
+								  state[0].RFS  <= ~|wr[st_num[3]] & ~rd[st_num[3]];
 				              state[0].CHIP <= 0; end
 
-				3'b010: begin state[0].CMD  <= !wr[st_num[3]]                  ? CTRL_RAS          : CTRL_IDLE;
+				3'b010: begin state[0].CMD  <= rd[st_num[3]]                   ? CTRL_RAS          : CTRL_IDLE;
 								  state[0].ADDR <= rd[st_num[3]]                   ? raddr1[st_num[3]] : '0;
 								  state[0].BANK <= rd[st_num[3]]                   ? {st_num[3],1'b1}  : {st_num[3],1'b1};
-								  state[0].RFS  <= ~|wr[st_num[3]] & ~rd[st_num[3]];
 				              state[0].CHIP <= 0; end
 								  
 				3'b011: begin state[0].CMD  <= wr2                             ? CTRL_CAS          : 
@@ -326,7 +327,7 @@ module sdram1
 
 		if (out0_read && !out0_chip) dout[out0_bank][31:16] <= rbuf;
 		if (out1_read && !out1_chip) dout[out1_bank][15: 0] <= rbuf;
-		if (out0_read && out0_chip) dout2 <= rbuf;
+		if (out1_read && out1_chip) dout2 <= rbuf;
 	end
 		
 	assign {dout_a0,dout_a1,dout_b0,dout_b1} = {dout[0],dout[1],dout[2],dout[3]};
