@@ -150,14 +150,15 @@ reg  [  1:  0] cache_wraddr;
 reg            cache_update;
 
 always @(posedge clk) begin
-	bit old_rd[10], old_we[10];
+	bit old_rd[10], old_we[10], old_rst;
 	bit write,read;
 	bit [3:0] chan;
 
+	old_rst <= rst;
 	for (int i=0; i<10; i++) begin
 		old_rd[i] <= mem_rd[i];
 		old_we[i] <= |mem_wr[i];
-		if (rst) begin
+		if (rst && !old_rst) begin
 			rcache_addr[i] <= '1;
 			read_busy[i] <= 0;
 		end
@@ -169,8 +170,9 @@ always @(posedge clk) begin
 			rcache_word[i] <= mem_16b[i];
 		end
 		
-		if (rst) begin
+		if (rst && !old_rst) begin
 			write_busy[i] <= 0;
+			rcache_update[i] <= 0;
 		end
 		else if (|mem_wr[i] && !old_we[i]) begin
 			write_addr[i] <= mem_addr[i];
@@ -195,7 +197,7 @@ always @(posedge clk) begin
 		end
 	end
 	
-	if (rst) begin
+	if (rst && !old_rst) begin
 		state <= '0;
 		ram_write <= 0;
 		ram_read  <= 0;
