@@ -117,12 +117,10 @@ Rename your Saturn bios file to `boot.rom` and place it in the `games/Saturn/` f
 ### Video Display Processor 1 (VDP1)
 
 - [ ] 512×256 Framebuffer (current size is limited to 352x256 pixels). *Games that make usage of the framebuffer as temporary data storage will not work (e.g., Burning Rangers)*
-- [ ] Gouraud Shading
 
 ### Video Display Processor 2 (VDP2)
 
 - [ ] PAL Mode
-- [ ] Line Screen
 - [ ] Mosaic
 
 ### Yamaha SCSP (Saturn Custom Sound Processor) YMF292
