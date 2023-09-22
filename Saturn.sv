@@ -1533,7 +1533,7 @@ module emu
 			endcase
 		end
 		
-		if(pressed) begin
+		if((ps2_key[10] != old_state) && pressed) begin
 			casex(code)
 `ifdef DEBUG
 				'h016: begin DBG_EXT[0] <= ~DBG_EXT[0]; end 	// 1
