@@ -120,7 +120,6 @@ Rename your Saturn bios file to `boot.rom` and place it in the `games/Saturn/` f
 
 ### Video Display Processor 2 (VDP2)
 
-- [ ] PAL Mode
 - [ ] Mosaic
 
 ### Yamaha SCSP (Saturn Custom Sound Processor) YMF292

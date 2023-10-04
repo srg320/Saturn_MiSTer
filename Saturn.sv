@@ -474,18 +474,18 @@ module emu
 	);
 
 	always @(posedge CLK_50M) begin
-//		reg pald = 0, pald2 = 0;
+		reg pald = 0, pald2 = 0;
 		reg dotsel = 0, dotsel2 = 0;
 		reg [2:0] state = 0;
 
-//		pald  <= PAL;
-//		pald2 <= pald;
+		pald  <= PAL;
+		pald2 <= pald;
 		
 		dotsel  <= SMPC_DOTSEL;
 		dotsel2 <= dotsel;
 	
 		cfg_write <= 0;
-		if (dotsel2 != dotsel) state <= 1;
+		if (dotsel2 != dotsel || pald2 != pald) state <= 1;
 	
 		if (!cfg_waitrequest) begin
 			if (state) state <= state + 1'd1;
@@ -502,7 +502,8 @@ module emu
 					end
 				5: begin
 						cfg_address <= 7;
-						cfg_data <= !dotsel2 ? 2532450157 : 702807747;
+						cfg_data <= !pald2 ? (!dotsel2 ? 32'h96F21F6D : 32'h29E3FEC3) :
+						                     (!dotsel2 ? 32'h8A3D70A4 : 32'h1999999A);
 						cfg_write <= 1;
 					end
 				7: begin
@@ -643,19 +644,23 @@ module emu
 	wire  [1:0] HRES;
 	wire  [1:0] VRES;
 	wire        DCE_R;
-
-	wire [31:0] in_clk = !SMPC_DOTSEL ? 53685200 : 57272720;
 	
 	bit MCLK_DIV;
 	always @(posedge clk_sys) MCLK_DIV <= ~MCLK_DIV;
 	wire SYS_CE_R =  MCLK_DIV;
 	wire SYS_CE_F = ~MCLK_DIV;
 	
+	reg [31:0] in_clk;
+	always @(posedge clk_sys) 
+		in_clk <= !PAL ? (!SMPC_DOTSEL ? 53685200 : 57272720) :
+	                    (!SMPC_DOTSEL ? 53375000 : 56875000);
+
+	
 	wire SMPC_CE;		//SMPC clock 4.0000MHz
 	CEGen SMPC_CEGen
 	(
 		.CLK(clk_sys),
-		.RST_N(1/*RST_N*/),
+		.RST_N(1),
 		.IN_CLK(in_clk),
 		.OUT_CLK(4000000),
 		.CE(SMPC_CE)
@@ -665,7 +670,7 @@ module emu
 	CEGen SCSP_CEGen
 	(
 		.CLK(clk_sys),
-		.RST_N(1/*RST_N*/),
+		.RST_N(1),
 		.IN_CLK(in_clk),
 		.OUT_CLK(22579200),
 		.CE(SCSP_CE)
@@ -675,7 +680,7 @@ module emu
 	CEGen CD_CEGen
 	(
 		.CLK(clk_sys),
-		.RST_N(1/*RST_N*/),
+		.RST_N(1),
 		.IN_CLK(in_clk),
 		.OUT_CLK(20000000*2),
 		.CE(CD_CE)
@@ -685,7 +690,7 @@ module emu
 	CEGen CDD_CEGen
 	(
 		.CLK(clk_sys),
-		.RST_N(1/*RST_N*/),
+		.RST_N(1),
 		.IN_CLK(in_clk),
 		.OUT_CLK(44100*2*2),
 		.CE(CDD_2X_CE)
@@ -701,6 +706,8 @@ module emu
 		.SYS_CE_R(SYS_CE_R),
 		
 		.SRES_N(~status[0]),
+		
+		.PAL(PAL),
 		
 		.MEM_A(MEM_A),
 		.MEM_DI(MEM_DI),
@@ -1509,7 +1516,7 @@ module emu
 		reg old_state = 0;
 	
 		DBG_RUN <= 0;
-		DBG_EXT <= '0;
+//		DBG_EXT <= '0;
 		
 		old_state <= ps2_key[10];
 		if((ps2_key[10] != old_state) && pressed) begin
@@ -1524,7 +1531,7 @@ module emu
 				'h00A: begin SND_EN[0] <= ~SND_EN[0]; end 	// F8
 				'h001: begin SND_EN[1] <= ~SND_EN[1]; end 	// F9
 				'h009: begin SND_EN[2] <= ~SND_EN[2]; end 	// F10
-				'h078: begin SCRN_EN <= '1; SND_EN <= '1; DBG_EXT <= '1; end 	// F11
+				'h078: begin SCRN_EN <= '1; SND_EN <= '1; DBG_EXT <= '0; end 	// F11
 `ifdef DEBUG
 //				'h009: begin DBG_BREAK <= ~DBG_BREAK; end 	// F10
 //				'h078: begin DBG_RUN <= 1; end 	// F11
